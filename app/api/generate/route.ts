@@ -43,88 +43,22 @@ ${ramRom ? `RAM/ROM: ${ramRom}` : ""}
 Price: £${price}
 Description: ${shortDescription}
 Selling Points: ${sellingPoints}
-Output Language: ${language} (EN = English; for Yahoo.jp and Rakuten, still write in English for now as language toggle is coming later)
-${hasImages ? "\nProduct images have been provided. Analyse them to extract visible text, features, screen content, product design details, and compatible car information shown in the images. Use these visual details to enhance and enrich all listings." : ""}
+${hasImages ? "\nProduct images provided — analyse them to extract visible features, text, design details." : ""}
 
-Generate the following in valid JSON format with NO markdown code blocks, just raw JSON:
-{
-  "amazon": {
-    "title": "",
-    "bullets": ["", "", "", "", ""],
-    "keywords": "",
-    "description": ""
-  },
-  "ebay": {
-    "title": "",
-    "description": "",
-    "specifics": {
-      "Brand": "XTRONS",
-      "Model": "",
-      "Compatibility": "",
-      "Screen Size": "",
-      "Connectivity": ""
-    }
-  },
-  "aliexpress": {
-    "title": "",
-    "description": ""
-  },
-  "yahoo_jp": {
-    "title": "",
-    "description": ""
-  },
-  "rakuten": {
-    "title": "",
-    "description": ""
-  },
-  "woocommerce": {
-    "title": "",
-    "short_description": "",
-    "long_description": "",
-    "meta_title": "",
-    "meta_description": ""
-  },
-  "facebook": {
-    "post": ""
-  },
-  "youtube": {
-    "title": "",
-    "description": "",
-    "tags": "",
-    "script_outline": ""
-  },
-  "twitter": {
-    "thread": ["", "", ""]
-  },
-  "line": {
-    "message": ""
-  },
-  "reddit": {
-    "title": "",
-    "body": ""
-  },
-  "ai_recommendation": {
-    "suggestions": ["", "", ""],
-    "blurb": ""
-  }
-}
+Return ONLY a raw JSON object (no markdown, no code blocks, no explanation). Use this exact structure:
+{"amazon":{"title":"","bullets":["","","","",""],"keywords":"","description":""},"ebay":{"title":"","description":"","specifics":{"Brand":"XTRONS","Model":"","Compatibility":"","Screen Size":"","Connectivity":""}},"aliexpress":{"title":"","description":""},"yahoo_jp":{"title":"","description":""},"rakuten":{"title":"","description":""},"woocommerce":{"title":"","short_description":"","long_description":"","meta_title":"","meta_description":""},"facebook":{"post":""},"youtube":{"title":"","description":"","tags":"","script_outline":""},"twitter":{"thread":["","",""]},"line":{"message":""},"reddit":{"title":"","body":""},"ai_recommendation":{"suggestions":["","",""],"blurb":""}}
 
 Rules:
-- Amazon title: max 200 chars, include car model compatibility, key features, brand XTRONS
-- eBay title: max 80 chars, be concise but descriptive
-- Amazon bullets: exactly 5 bullets, each starting with a capital letter key benefit (e.g. "WIRELESS APPLE CARPLAY & ANDROID AUTO:")
-- Keywords: comma-separated, include car model names, feature terms, popular search phrases
-- WooCommerce long_description: rich HTML-friendly content with paragraphs, can use <p> and <ul> tags
-- YouTube script_outline: 3-4 bullet points for a ~2 minute video script
-- Twitter thread: exactly 3 tweets, each max 280 chars, engaging with emojis
-- LINE message: casual, short, emoji-friendly format
-- Reddit body: detailed, helpful post for r/CarAV, r/CarPlay or r/AndroidAuto community
-- Facebook post: engaging caption with relevant emojis, call to action
-- AI recommendation: suggest 2-3 complementary XTRONS products (DAB dongle, reverse camera, install harness, TPMS, roof monitor) based on product category
-- Make all content genuinely useful, engaging, and SEO-optimised
-- Return ONLY valid JSON, no other text`;
+- Amazon title: max 200 chars, include car model, features, XTRONS brand
+- eBay title: max 80 chars
+- Amazon bullets: exactly 5, each starting with ALL CAPS key benefit label
+- Keywords: comma-separated SEO terms
+- Twitter thread: exactly 3 tweets max 280 chars each
+- Facebook post: engaging with emojis and CTA
+- AI recommendations: 2-3 complementary XTRONS accessories based on category
+- All content in English (language toggle coming later)
+- CRITICAL: Return ONLY the JSON object, nothing else`;
 
-    // Build message content — images first (if any), then text prompt
     type AllowedMediaType = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
     type ContentBlock =
       | { type: "image"; source: { type: "base64"; media_type: AllowedMediaType; data: string } }
@@ -148,15 +82,9 @@ Rules:
     content.push({ type: "text", text: promptText });
 
     const message = await client.messages.create({
-      // Use sonnet when images present (vision-capable), haiku otherwise
       model: hasImages ? "claude-sonnet-4-5" : "claude-haiku-4-5",
-      max_tokens: 4096,
-      messages: [
-        {
-          role: "user",
-          content,
-        },
-      ],
+      max_tokens: 8192,
+      messages: [{ role: "user", content }],
     });
 
     const responseContent = message.content[0];
@@ -164,29 +92,27 @@ Rules:
       throw new Error("Unexpected response type from Claude");
     }
 
-    // Parse the JSON response
     let parsed;
     try {
-      // Strip any potential markdown code blocks
       let jsonText = responseContent.text.trim();
-      if (jsonText.startsWith("```")) {
-        jsonText = jsonText
-          .replace(/^```(?:json)?\n?/, "")
-          .replace(/\n?```$/, "");
+      // Strip markdown code blocks if present
+      jsonText = jsonText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "");
+      // Find JSON object boundaries
+      const start = jsonText.indexOf("{");
+      const end = jsonText.lastIndexOf("}");
+      if (start !== -1 && end !== -1) {
+        jsonText = jsonText.slice(start, end + 1);
       }
       parsed = JSON.parse(jsonText);
     } catch {
-      throw new Error(`Failed to parse AI response as JSON: ${responseContent.text}`);
+      throw new Error(`Failed to parse AI response as JSON`);
     }
 
     return NextResponse.json({ success: true, data: parsed });
   } catch (error) {
     console.error("Generate API error:", error);
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
+      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
     );
   }
