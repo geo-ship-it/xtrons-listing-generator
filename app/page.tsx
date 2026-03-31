@@ -369,6 +369,45 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("Marketplaces");
   const [language] = useState("EN");
 
+  // URL import state
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState<"idle" | "success" | "error">("idle");
+  const [importUrlFocused, setImportUrlFocused] = useState(false);
+
+  const handleImportUrl = async () => {
+    if (!importUrl.trim()) return;
+    setImporting(true);
+    setImportStatus("idle");
+    try {
+      const res = await fetch("/api/scrape-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: importUrl.trim() }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "Extraction failed");
+      const d = json.data;
+      setFormData((prev) => ({
+        productName: d.productName || prev.productName,
+        sku: d.sku || prev.sku,
+        category: d.category && ["Car Stereo", "Roof Monitor", "Accessory", "DAB Dongle", "Camera"].includes(d.category) ? d.category : prev.category,
+        keyFeatures: d.keyFeatures || prev.keyFeatures,
+        compatibleCars: d.compatibleCars || prev.compatibleCars,
+        screenSize: d.screenSize || prev.screenSize,
+        ramRom: d.ramRom || prev.ramRom,
+        price: d.price ? String(d.price) : prev.price,
+        shortDescription: d.shortDescription || prev.shortDescription,
+        sellingPoints: d.sellingPoints || prev.sellingPoints,
+      }));
+      setImportStatus("success");
+    } catch {
+      setImportStatus("error");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleChange = useCallback(
     (
       e: React.ChangeEvent<
@@ -514,6 +553,97 @@ export default function Home() {
               boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04)",
             }}
           >
+            {/* ── URL Import ── */}
+            <div
+              style={{
+                marginBottom: 24,
+                padding: "16px",
+                background: "#F5F5F7",
+                borderRadius: 12,
+                border: "1px solid #E5E5E7",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: "0.07em",
+                  textTransform: "uppercase",
+                  color: "#6E6E73",
+                  marginBottom: 10,
+                }}
+              >
+                Import from URL
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="url"
+                  value={importUrl}
+                  onChange={(e) => { setImportUrl(e.target.value); setImportStatus("idle"); }}
+                  onFocus={() => setImportUrlFocused(true)}
+                  onBlur={() => setImportUrlFocused(false)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleImportUrl(); }}
+                  placeholder="https://xtrons.com/product/..."
+                  style={{
+                    flex: 1,
+                    background: importUrlFocused ? "#FFFFFF" : "#EBEBED",
+                    border: "none",
+                    borderRadius: 10,
+                    padding: "9px 12px",
+                    fontSize: 13,
+                    color: "#1d1d1f",
+                    outline: "none",
+                    transition: "box-shadow 0.15s ease, background 0.15s ease",
+                    fontFamily: "inherit",
+                    boxShadow: importUrlFocused ? "0 0 0 3px rgba(0, 113, 227, 0.25)" : "none",
+                  }}
+                />
+                <button
+                  onClick={handleImportUrl}
+                  disabled={importing || !importUrl.trim()}
+                  style={{
+                    height: 36,
+                    padding: "0 14px",
+                    background: "#FFFFFF",
+                    color: importing || !importUrl.trim() ? "#AEAEB2" : "#0071E3",
+                    border: `1.5px solid ${importing || !importUrl.trim() ? "#D1D1D6" : "#0071E3"}`,
+                    borderRadius: 10,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: importing || !importUrl.trim() ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontFamily: "inherit",
+                    transition: "all 0.15s ease",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                >
+                  {importing ? (
+                    <>
+                      <svg className="animate-spin" width={13} height={13} fill="none" viewBox="0 0 24 24">
+                        <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Fetching…
+                    </>
+                  ) : (
+                    "Import"
+                  )}
+                </button>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 11, color: "#AEAEB2" }}>
+                {importStatus === "idle" && "Paste any product URL to auto-fill the form"}
+                {importStatus === "success" && (
+                  <span style={{ color: "#34C759", fontWeight: 500 }}>✓ Form filled from URL</span>
+                )}
+                {importStatus === "error" && (
+                  <span style={{ color: "#FF3B30" }}>Could not extract product data. Please fill manually.</span>
+                )}
+              </div>
+            </div>
+
             <h2
               style={{
                 fontSize: 11,
