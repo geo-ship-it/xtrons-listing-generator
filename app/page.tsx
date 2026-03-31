@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface FormData {
@@ -14,6 +14,13 @@ interface FormData {
   price: string;
   shortDescription: string;
   sellingPoints: string;
+}
+
+interface UploadedImage {
+  base64: string;
+  mediaType: string;
+  preview: string; // object URL for thumbnail
+  name: string;
 }
 
 interface GeneratedData {
@@ -60,6 +67,61 @@ const CATEGORIES = [
 ];
 const TABS = ["Marketplaces", "Social Content", "AI Picks"] as const;
 type Tab = (typeof TABS)[number];
+
+// ─── Image compression helper ─────────────────────────────────────────────────
+async function compressImage(file: File, maxWidth = 1200): Promise<{ base64: string; mediaType: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+
+        // Only downscale if needed
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("Canvas not available"));
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const mimeType = file.type === "image/png" ? "image/png" : "image/jpeg";
+        const quality = mimeType === "image/png" ? undefined : 0.85;
+        const dataUrl = canvas.toDataURL(mimeType, quality);
+        const base64 = dataUrl.split(",")[1];
+        resolve({ base64, mediaType: mimeType });
+      };
+      img.onerror = reject;
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ─── URL to base64 helper ─────────────────────────────────────────────────────
+async function urlToBase64(url: string): Promise<{ base64: string; mediaType: string } | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") || "image/jpeg";
+    const mediaType = contentType.split(";")[0].trim();
+    if (!["image/jpeg", "image/png", "image/webp"].includes(mediaType)) return null;
+    const buf = await res.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const base64 = btoa(binary);
+    return { base64, mediaType };
+  } catch {
+    return null;
+  }
+}
 
 // ─── Copy Button ──────────────────────────────────────────────────────────────
 function CopyButton({
@@ -374,11 +436,21 @@ export default function Home() {
   const [importing, setImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<"idle" | "success" | "error">("idle");
   const [importUrlFocused, setImportUrlFocused] = useState(false);
+  const [urlImages, setUrlImages] = useState<UploadedImage[]>([]);
+
+  // Image upload state
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Combined images (URL-extracted + uploaded)
+  const allImages = [...urlImages, ...uploadedImages];
 
   const handleImportUrl = async () => {
     if (!importUrl.trim()) return;
     setImporting(true);
     setImportStatus("idle");
+    setUrlImages([]);
     try {
       const res = await fetch("/api/scrape-url", {
         method: "POST",
@@ -400,11 +472,110 @@ export default function Home() {
         shortDescription: d.shortDescription || prev.shortDescription,
         sellingPoints: d.sellingPoints || prev.sellingPoints,
       }));
+
+      // Fetch and convert URL images to base64
+      if (d.imageUrls && d.imageUrls.length > 0) {
+        const fetched: UploadedImage[] = [];
+        for (const imgUrl of d.imageUrls.slice(0, 5)) {
+          const result = await urlToBase64(imgUrl);
+          if (result) {
+            fetched.push({
+              base64: result.base64,
+              mediaType: result.mediaType,
+              preview: imgUrl,
+              name: imgUrl.split("/").pop() || "product-image",
+            });
+          }
+          if (fetched.length >= 5) break;
+        }
+        setUrlImages(fetched);
+      }
+
       setImportStatus("success");
     } catch {
       setImportStatus("error");
     } finally {
       setImporting(false);
+    }
+  };
+
+  const processImageFiles = useCallback(async (files: FileList | File[]) => {
+    const fileArr = Array.from(files);
+    const remaining = 5 - uploadedImages.length;
+    if (remaining <= 0) return;
+
+    const toProcess = fileArr.slice(0, remaining);
+    const newImages: UploadedImage[] = [];
+
+    for (const file of toProcess) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) continue;
+      try {
+        const preview = URL.createObjectURL(file);
+        // Compress if > 2MB
+        const needsCompress = file.size > 2 * 1024 * 1024;
+        let base64: string;
+        let mediaType: string;
+        if (needsCompress) {
+          const compressed = await compressImage(file);
+          base64 = compressed.base64;
+          mediaType = compressed.mediaType;
+        } else {
+          const result = await new Promise<{ base64: string; mediaType: string }>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const dataUrl = e.target?.result as string;
+              resolve({
+                base64: dataUrl.split(",")[1],
+                mediaType: file.type,
+              });
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          base64 = result.base64;
+          mediaType = result.mediaType;
+        }
+        newImages.push({ base64, mediaType, preview, name: file.name });
+      } catch {
+        // Skip failed images
+      }
+    }
+
+    setUploadedImages((prev) => [...prev, ...newImages].slice(0, 5));
+  }, [uploadedImages.length]);
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      processImageFiles(e.target.files);
+    }
+    // Reset input so the same file can be re-uploaded if needed
+    e.target.value = "";
+  };
+
+  const handleRemoveImage = (index: number, fromUrl: boolean) => {
+    if (fromUrl) {
+      setUrlImages((prev) => prev.filter((_, i) => i !== index));
+    } else {
+      setUploadedImages((prev) => {
+        const img = prev[index];
+        if (img?.preview?.startsWith("blob:")) URL.revokeObjectURL(img.preview);
+        return prev.filter((_, i) => i !== index);
+      });
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => setDragOver(false);
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files) {
+      processImageFiles(e.dataTransfer.files);
     }
   };
 
@@ -427,10 +598,19 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
+      const imagesPayload = allImages.map((img) => ({
+        base64: img.base64,
+        mediaType: img.mediaType,
+      }));
+
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, language }),
+        body: JSON.stringify({
+          ...formData,
+          language,
+          images: imagesPayload,
+        }),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Generation failed");
@@ -442,6 +622,53 @@ export default function Home() {
       setLoading(false);
     }
   };
+
+  // Shared thumbnail renderer
+  const renderThumbnails = (images: UploadedImage[], fromUrl: boolean) => (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+      {images.map((img, i) => (
+        <div key={i} style={{ position: "relative" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={img.preview}
+            alt={img.name}
+            style={{
+              width: 52,
+              height: 52,
+              objectFit: "cover",
+              borderRadius: 8,
+              border: "1px solid #E5E5E7",
+            }}
+          />
+          <button
+            onClick={() => handleRemoveImage(i, fromUrl)}
+            title="Remove"
+            style={{
+              position: "absolute",
+              top: -5,
+              right: -5,
+              width: 18,
+              height: 18,
+              background: "#1d1d1f",
+              color: "#fff",
+              border: "none",
+              borderRadius: "50%",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 10,
+              lineHeight: 1,
+              fontWeight: 700,
+              padding: 0,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div style={{ minHeight: "100vh", background: "#F5F5F7" }}>
@@ -556,7 +783,7 @@ export default function Home() {
             {/* ── URL Import ── */}
             <div
               style={{
-                marginBottom: 24,
+                marginBottom: 16,
                 padding: "16px",
                 background: "#F5F5F7",
                 borderRadius: 12,
@@ -642,6 +869,94 @@ export default function Home() {
                   <span style={{ color: "#FF3B30" }}>Could not extract product data. Please fill manually.</span>
                 )}
               </div>
+
+              {/* URL-extracted image thumbnails */}
+              {urlImages.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 11, color: "#34C759", fontWeight: 500, marginBottom: 4 }}>
+                    📷 {urlImages.length} product image{urlImages.length > 1 ? "s" : ""} found — included in generation
+                  </div>
+                  {renderThumbnails(urlImages, true)}
+                </div>
+              )}
+            </div>
+
+            {/* ── Image Upload ── */}
+            <div
+              style={{
+                marginBottom: 24,
+                padding: "16px",
+                background: "#F5F5F7",
+                borderRadius: 12,
+                border: "1px solid #E5E5E7",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: "0.07em",
+                  textTransform: "uppercase",
+                  color: "#6E6E73",
+                  marginBottom: 10,
+                }}
+              >
+                📷 Product Images <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span>
+              </div>
+
+              {/* Drop zone */}
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => uploadedImages.length < 5 && fileInputRef.current?.click()}
+                style={{
+                  border: `1.5px dashed ${dragOver ? "#0071E3" : "#E5E5E7"}`,
+                  background: dragOver ? "#EAF3FF" : "#FAFAFA",
+                  borderRadius: 12,
+                  padding: "16px 12px",
+                  textAlign: "center",
+                  cursor: uploadedImages.length >= 5 ? "not-allowed" : "pointer",
+                  transition: "all 0.15s ease",
+                  opacity: uploadedImages.length >= 5 ? 0.5 : 1,
+                }}
+              >
+                <div style={{ fontSize: 20, marginBottom: 4 }}>⬆️</div>
+                <div style={{ fontSize: 13, color: "#1d1d1f", fontWeight: 500 }}>
+                  Drag & drop or click to upload
+                </div>
+                <div style={{ fontSize: 11, color: "#AEAEB2", marginTop: 3 }}>
+                  JPG, PNG, WEBP — up to 5 images
+                </div>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                onChange={handleFileInputChange}
+                style={{ display: "none" }}
+              />
+
+              {/* Uploaded thumbnails */}
+              {uploadedImages.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  {renderThumbnails(uploadedImages, false)}
+                </div>
+              )}
+
+              {/* Status */}
+              {allImages.length > 0 && (
+                <div style={{ marginTop: 10, fontSize: 11, color: "#34C759", fontWeight: 500 }}>
+                  ✓ {allImages.length} image{allImages.length > 1 ? "s" : ""} included in generation
+                </div>
+              )}
+              {allImages.length === 0 && (
+                <div style={{ marginTop: 8, fontSize: 11, color: "#AEAEB2" }}>
+                  AI will analyse images to enhance listings
+                </div>
+              )}
             </div>
 
             <h2
@@ -828,7 +1143,9 @@ export default function Home() {
                   <svg width={16} height={16} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                  Generate All Listings
+                  {allImages.length > 0
+                    ? `Generate All Listings · ${allImages.length} image${allImages.length > 1 ? "s" : ""}`
+                    : "Generate All Listings"}
                 </>
               )}
             </button>

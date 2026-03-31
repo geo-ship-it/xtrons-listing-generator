@@ -7,7 +7,7 @@ const client = new Anthropic({
 
 const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY || "fc-cad0afe772e445ca8b49123646a1d036";
 
-async function scrapeWithFirecrawl(url: string): Promise<string> {
+async function scrapeWithFirecrawl(url: string): Promise<{ markdown: string; imageUrls: string[] }> {
   const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
     method: "POST",
     headers: {
@@ -24,10 +24,52 @@ async function scrapeWithFirecrawl(url: string): Promise<string> {
   const data = await res.json();
   const markdown = data?.data?.markdown || data?.markdown || "";
   if (!markdown) throw new Error("Firecrawl returned no content");
-  return markdown;
+
+  // Extract image URLs from markdown: ![alt](url) patterns
+  const imageUrls = extractProductImages(markdown);
+
+  return { markdown, imageUrls };
 }
 
-async function scrapeWithFetch(url: string): Promise<string> {
+function extractProductImages(markdown: string): string[] {
+  const urls: string[] = [];
+  
+  // Match markdown image syntax: ![alt](url)
+  const mdImageRegex = /!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g;
+  let match;
+  while ((match = mdImageRegex.exec(markdown)) !== null) {
+    urls.push(match[2]);
+  }
+
+  // Filter out likely non-product images (logos, icons, small UI elements)
+  const filtered = urls.filter((url) => {
+    const lower = url.toLowerCase();
+    // Exclude common non-product patterns
+    if (lower.includes("logo") || lower.includes("icon") || lower.includes("favicon")) return false;
+    if (lower.includes("banner") && lower.includes("nav")) return false;
+    if (lower.includes("flag") || lower.includes("sprite") || lower.includes("badge")) return false;
+    if (lower.includes("pixel") || lower.includes("tracking") || lower.includes("analytics")) return false;
+    // Prefer product-related URLs
+    // Keep if it has image extensions
+    if (/\.(jpg|jpeg|png|webp)(\?|$)/i.test(url)) return true;
+    // Keep if URL path looks product-related
+    if (/product|item|image|photo|gallery|media/i.test(url)) return true;
+    return true; // include by default if no exclusion matched
+  });
+
+  // Deduplicate
+  const seen = new Set<string>();
+  const deduped = filtered.filter((u) => {
+    if (seen.has(u)) return false;
+    seen.add(u);
+    return true;
+  });
+
+  // Return up to 5
+  return deduped.slice(0, 5);
+}
+
+async function scrapeWithFetch(url: string): Promise<{ markdown: string; imageUrls: string[] }> {
   const res = await fetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (compatible; ListingBot/1.0)",
@@ -35,8 +77,22 @@ async function scrapeWithFetch(url: string): Promise<string> {
   });
   if (!res.ok) throw new Error(`Fetch returned ${res.status}`);
   const html = await res.text();
+
+  // Extract image URLs from img tags
+  const imgTagRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  const imgUrls: string[] = [];
+  let m;
+  while ((m = imgTagRegex.exec(html)) !== null) {
+    const src = m[1];
+    if (src.startsWith("http") || src.startsWith("//")) {
+      imgUrls.push(src.startsWith("//") ? `https:${src}` : src);
+    }
+  }
+  const imageUrls = extractProductImages(imgUrls.join("\n") + imgUrls.map(u => `![img](${u})`).join("\n"));
+
   // Strip HTML tags for a rough plain-text version
-  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 8000);
+  const markdown = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 8000);
+  return { markdown, imageUrls };
 }
 
 async function extractProductData(content: string) {
@@ -85,19 +141,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "URL is required" }, { status: 400 });
     }
 
-    let content: string;
+    let markdown: string;
+    let imageUrls: string[] = [];
 
     // Try Firecrawl first, fall back to direct fetch
     try {
-      content = await scrapeWithFirecrawl(url);
+      const result = await scrapeWithFirecrawl(url);
+      markdown = result.markdown;
+      imageUrls = result.imageUrls;
     } catch (err) {
       console.warn("Firecrawl failed, falling back to direct fetch:", err);
-      content = await scrapeWithFetch(url);
+      const result = await scrapeWithFetch(url);
+      markdown = result.markdown;
+      imageUrls = result.imageUrls;
     }
 
-    const productData = await extractProductData(content);
+    const productData = await extractProductData(markdown);
 
-    return NextResponse.json({ success: true, data: productData });
+    return NextResponse.json({ success: true, data: { ...productData, imageUrls } });
   } catch (error) {
     console.error("Scrape URL error:", error);
     return NextResponse.json(

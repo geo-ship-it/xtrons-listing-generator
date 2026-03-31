@@ -5,6 +5,11 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+interface ImageInput {
+  base64: string;
+  mediaType: "image/jpeg" | "image/png" | "image/webp";
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -20,9 +25,12 @@ export async function POST(request: NextRequest) {
       shortDescription,
       sellingPoints,
       language = "EN",
+      images = [] as ImageInput[],
     } = body;
 
-    const prompt = `You are an expert e-commerce copywriter and SEO specialist for automotive electronics.
+    const hasImages = images && images.length > 0;
+
+    const promptText = `You are an expert e-commerce copywriter and SEO specialist for automotive electronics.
 Generate optimised listings for this XTRONS product for all platforms.
 
 Product: ${productName}
@@ -36,6 +44,7 @@ Price: £${price}
 Description: ${shortDescription}
 Selling Points: ${sellingPoints}
 Output Language: ${language} (EN = English; for Yahoo.jp and Rakuten, still write in English for now as language toggle is coming later)
+${hasImages ? "\nProduct images have been provided. Analyse them to extract visible text, features, screen content, product design details, and compatible car information shown in the images. Use these visual details to enhance and enrich all listings." : ""}
 
 Generate the following in valid JSON format with NO markdown code blocks, just raw JSON:
 {
@@ -115,19 +124,43 @@ Rules:
 - Make all content genuinely useful, engaging, and SEO-optimised
 - Return ONLY valid JSON, no other text`;
 
+    // Build message content — images first (if any), then text prompt
+    type AllowedMediaType = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+    type ContentBlock =
+      | { type: "image"; source: { type: "base64"; media_type: AllowedMediaType; data: string } }
+      | { type: "text"; text: string };
+
+    const content: ContentBlock[] = [];
+
+    if (hasImages) {
+      for (const img of images as ImageInput[]) {
+        content.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: img.mediaType as AllowedMediaType,
+            data: img.base64,
+          },
+        });
+      }
+    }
+
+    content.push({ type: "text", text: promptText });
+
     const message = await client.messages.create({
-      model: "claude-haiku-4-5",
+      // Use sonnet when images present (vision-capable), haiku otherwise
+      model: hasImages ? "claude-sonnet-4-5" : "claude-haiku-4-5",
       max_tokens: 4096,
       messages: [
         {
           role: "user",
-          content: prompt,
+          content,
         },
       ],
     });
 
-    const content = message.content[0];
-    if (content.type !== "text") {
+    const responseContent = message.content[0];
+    if (responseContent.type !== "text") {
       throw new Error("Unexpected response type from Claude");
     }
 
@@ -135,7 +168,7 @@ Rules:
     let parsed;
     try {
       // Strip any potential markdown code blocks
-      let jsonText = content.text.trim();
+      let jsonText = responseContent.text.trim();
       if (jsonText.startsWith("```")) {
         jsonText = jsonText
           .replace(/^```(?:json)?\n?/, "")
@@ -143,7 +176,7 @@ Rules:
       }
       parsed = JSON.parse(jsonText);
     } catch {
-      throw new Error(`Failed to parse AI response as JSON: ${content.text}`);
+      throw new Error(`Failed to parse AI response as JSON: ${responseContent.text}`);
     }
 
     return NextResponse.json({ success: true, data: parsed });
