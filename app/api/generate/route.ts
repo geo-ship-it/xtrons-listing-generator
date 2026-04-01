@@ -21,7 +21,6 @@ export async function POST(request: NextRequest) {
       compatibleCars,
       screenSize,
       ramRom,
-      price,
       shortDescription,
       sellingPoints,
       language = "EN",
@@ -41,7 +40,7 @@ Features: ${keyFeatures}
 Compatible Cars: ${compatibleCars}
 ${screenSize ? `Screen Size: ${screenSize}` : ""}
 ${ramRom ? `RAM/ROM: ${ramRom}` : ""}
-Price: £${price}
+
 Description: ${shortDescription}
 Selling Points: ${sellingPoints}
 ${hasImages ? "\nProduct images provided — analyse them to extract visible features, text, design details." : ""}

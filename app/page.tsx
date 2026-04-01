@@ -33,7 +33,7 @@ interface FormData {
   compatibleCars: string;
   screenSize: string;
   ramRom: string;
-  price: string;
+  price?: string;
   shortDescription: string;
   sellingPoints: string;
 }
@@ -637,8 +637,8 @@ export default function Home() {
   );
 
   const handleGenerate = async () => {
-    if (!formData.productName || !formData.price) {
-      setError("Product name and price are required.");
+    if (!formData.productName) {
+      setError("Product name is required.");
       return;
     }
     setLoading(true);
@@ -1134,17 +1134,6 @@ export default function Home() {
                 />
               </InputField>
             </div>
-
-            <InputField label="Price (GBP)" required>
-              <TextInput
-                name="price"
-                value={formData.price}
-                onChange={handleChange}
-                placeholder="299.99"
-                type="number"
-                prefix="£"
-              />
-            </InputField>
 
             <InputField label="Short Description" hint="(2–3 sentences)">
               <TextArea
