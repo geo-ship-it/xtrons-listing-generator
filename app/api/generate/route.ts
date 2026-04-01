@@ -58,6 +58,7 @@ Rules:
 - Facebook post: engaging with emojis and CTA
 - AI recommendations: 2-3 complementary XTRONS accessories based on category
 - All content in English (language toggle coming later)
+- yahoo_jp and rakuten: write title and description in Japanese (日本語) — use natural Japanese for Japanese automotive shoppers
 - Newsletter tone: ${newsletterTone} — write the entire newsletter in this tone
   - friendly: warm, conversational, personal, like writing to a friend who loves cars
   - professional: formal, authoritative, B2B-appropriate, for distributors and trade buyers

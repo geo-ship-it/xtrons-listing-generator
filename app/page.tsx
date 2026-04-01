@@ -2,6 +2,28 @@
 
 import { useState, useCallback, useRef } from "react";
 
+// ─── WooCommerce Language Config ──────────────────────────────────────────────
+const WOO_LANGUAGES = [
+  { code: "EN", label: "EN", flag: "🇬🇧", name: "English" },
+  { code: "DE", label: "DE", flag: "🇩🇪", name: "German" },
+  { code: "FR", label: "FR", flag: "🇫🇷", name: "French" },
+  { code: "ES", label: "ES", flag: "🇪🇸", name: "Spanish" },
+  { code: "IT", label: "IT", flag: "🇮🇹", name: "Italian" },
+  { code: "JP", label: "JP", flag: "🇯🇵", name: "Japanese" },
+  { code: "NL", label: "NL", flag: "🇳🇱", name: "Dutch" },
+  { code: "PL", label: "PL", flag: "🇵🇱", name: "Polish" },
+] as const;
+type WooLangCode = typeof WOO_LANGUAGES[number]["code"];
+
+// ─── WooContent type ─────────────────────────────────────────────────────────
+interface WooContent {
+  title: string;
+  short_description: string;
+  long_description: string;
+  meta_title: string;
+  meta_description: string;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface FormData {
   productName: string;
@@ -50,13 +72,7 @@ interface GeneratedData {
   aliexpress: { title: string; description: string };
   yahoo_jp: { title: string; description: string };
   rakuten: { title: string; description: string };
-  woocommerce: {
-    title: string;
-    short_description: string;
-    long_description: string;
-    meta_title: string;
-    meta_description: string;
-  };
+  woocommerce: WooContent;
   facebook: { post: string };
   youtube: {
     title: string;
@@ -456,6 +472,11 @@ export default function Home() {
   const [newsletterLoading, setNewsletterLoading] = useState(false);
   const [newsletterToneChanged, setNewsletterToneChanged] = useState(false);
 
+  // WooCommerce multi-language state
+  const [wooTranslations, setWooTranslations] = useState<Record<string, WooContent>>({});
+  const [wooLangLoading, setWooLangLoading] = useState<Record<string, boolean>>({});
+  const [activeWooLang, setActiveWooLang] = useState<WooLangCode>("EN");
+
   // URL import state
   const [importUrl, setImportUrl] = useState("");
   const [importing, setImporting] = useState(false);
@@ -643,6 +664,8 @@ export default function Home() {
       setGeneratedData(json.data);
       setNewsletterToneChanged(false);
       setActiveTab("Marketplaces");
+      setWooTranslations({});
+      setActiveWooLang("EN");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -667,6 +690,33 @@ export default function Home() {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setNewsletterLoading(false);
+    }
+  };
+
+  const handleGenerateWooTranslation = async (langCode: WooLangCode) => {
+    if (!generatedData) return;
+    const lang = WOO_LANGUAGES.find((l) => l.code === langCode);
+    if (!lang) return;
+
+    setWooLangLoading((prev) => ({ ...prev, [langCode]: true }));
+    try {
+      const res = await fetch("/api/translate-woo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wooContent: generatedData.woocommerce,
+          targetLanguage: lang.name,
+          targetCode: langCode,
+          productName: formData.productName,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "Translation failed");
+      setWooTranslations((prev) => ({ ...prev, [langCode]: json.data }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Translation failed");
+    } finally {
+      setWooLangLoading((prev) => ({ ...prev, [langCode]: false }));
     }
   };
 
@@ -1432,8 +1482,11 @@ export default function Home() {
                     title="🇯🇵 Yahoo Japan"
                     copyText={`Title: ${generatedData.yahoo_jp.title}\n\nDescription:\n${generatedData.yahoo_jp.description}`}
                   >
-                    <Field label="Title" value={generatedData.yahoo_jp.title} />
-                    <Field label="Description" value={generatedData.yahoo_jp.description} />
+                    <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
+                      🇯🇵 Japanese content — optimised for Yahoo Japan
+                    </div>
+                    <Field label="Title (日本語)" value={generatedData.yahoo_jp.title} />
+                    <Field label="Description (日本語)" value={generatedData.yahoo_jp.description} />
                   </Card>
 
                   {/* Rakuten */}
@@ -1441,27 +1494,155 @@ export default function Home() {
                     title="🏬 Rakuten"
                     copyText={`Title: ${generatedData.rakuten.title}\n\nDescription:\n${generatedData.rakuten.description}`}
                   >
-                    <Field label="Title" value={generatedData.rakuten.title} />
-                    <Field label="Description" value={generatedData.rakuten.description} />
+                    <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
+                      🇯🇵 Japanese content — optimised for Rakuten Japan
+                    </div>
+                    <Field label="Title (日本語)" value={generatedData.rakuten.title} />
+                    <Field label="Description (日本語)" value={generatedData.rakuten.description} />
                   </Card>
 
-                  {/* WooCommerce */}
-                  <Card
-                    title="🛍️ WooCommerce"
-                    copyText={[
-                      `Product Title: ${generatedData.woocommerce.title}`,
-                      `\nShort Description: ${generatedData.woocommerce.short_description}`,
-                      `\nLong Description:\n${generatedData.woocommerce.long_description}`,
-                      `\nSEO Meta Title: ${generatedData.woocommerce.meta_title}`,
-                      `\nSEO Meta Description: ${generatedData.woocommerce.meta_description}`,
-                    ].join("")}
-                  >
-                    <Field label="Product Title" value={generatedData.woocommerce.title} />
-                    <Field label="Short Description" value={generatedData.woocommerce.short_description} />
-                    <Field label="Long Description (HTML)" value={generatedData.woocommerce.long_description} />
-                    <Field label="SEO Meta Title" value={generatedData.woocommerce.meta_title} />
-                    <Field label="SEO Meta Description" value={generatedData.woocommerce.meta_description} />
-                  </Card>
+                  {/* WooCommerce — Multi-Language */}
+                  {(() => {
+                    const activeLang = WOO_LANGUAGES.find((l) => l.code === activeWooLang)!;
+                    const activeContent: WooContent | null = activeWooLang === "EN"
+                      ? generatedData.woocommerce
+                      : wooTranslations[activeWooLang] || null;
+
+                    const copyText = activeContent
+                      ? [
+                          `Product Title: ${activeContent.title}`,
+                          `\nShort Description: ${activeContent.short_description}`,
+                          `\nLong Description:\n${activeContent.long_description}`,
+                          `\nSEO Meta Title: ${activeContent.meta_title}`,
+                          `\nSEO Meta Description: ${activeContent.meta_description}`,
+                        ].join("")
+                      : undefined;
+
+                    return (
+                      <div
+                        style={{
+                          background: "#FFFFFF",
+                          border: "1px solid #E5E5E7",
+                          borderRadius: 12,
+                          overflow: "hidden",
+                          marginBottom: 16,
+                        }}
+                      >
+                        {/* Card header */}
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "12px 16px",
+                            borderBottom: "1px solid #E5E5E7",
+                            background: "#FAFAFA",
+                          }}
+                        >
+                          <span style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f" }}>🛍️ WooCommerce</span>
+                          {copyText && <CopyButton text={copyText} label="Copy all" className="!opacity-100" />}
+                        </div>
+
+                        {/* Language tabs */}
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 0,
+                            padding: "0 16px",
+                            borderBottom: "1px solid #E5E5E7",
+                            background: "#FAFAFA",
+                            overflowX: "auto",
+                          }}
+                        >
+                          {WOO_LANGUAGES.map((lang) => {
+                            const isActive = activeWooLang === lang.code;
+                            const isGenerated = lang.code === "EN" || !!wooTranslations[lang.code];
+                            return (
+                              <button
+                                key={lang.code}
+                                onClick={() => setActiveWooLang(lang.code)}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  padding: "9px 10px",
+                                  fontSize: 12,
+                                  fontWeight: isActive ? 600 : 400,
+                                  color: isActive ? "#1d1d1f" : "#AEAEB2",
+                                  background: "none",
+                                  border: "none",
+                                  borderBottom: isActive ? "2px solid #0071E3" : "2px solid transparent",
+                                  cursor: "pointer",
+                                  transition: "all 0.15s ease",
+                                  fontFamily: "inherit",
+                                  whiteSpace: "nowrap",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <span style={{ fontSize: 14 }}>{lang.flag}</span>
+                                <span>{lang.label}</span>
+                                {isGenerated && lang.code !== "EN" && (
+                                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#34C759", display: "inline-block", marginLeft: 2 }} />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Content area */}
+                        <div style={{ padding: 16 }}>
+                          {activeContent ? (
+                            <>
+                              <Field label="Product Title" value={activeContent.title} />
+                              <Field label="Short Description" value={activeContent.short_description} />
+                              <Field label="Long Description (HTML)" value={activeContent.long_description} />
+                              <Field label="SEO Meta Title" value={activeContent.meta_title} />
+                              <Field label="SEO Meta Description" value={activeContent.meta_description} />
+                            </>
+                          ) : (
+                            <div style={{ textAlign: "center", padding: "24px 16px" }}>
+                              <div style={{ fontSize: 28, marginBottom: 10 }}>{activeLang.flag}</div>
+                              <p style={{ fontSize: 14, color: "#6E6E73", marginBottom: 16 }}>
+                                {activeLang.name} translation not generated yet
+                              </p>
+                              <button
+                                onClick={() => handleGenerateWooTranslation(activeWooLang)}
+                                disabled={wooLangLoading[activeWooLang]}
+                                style={{
+                                  height: 36,
+                                  padding: "0 20px",
+                                  background: wooLangLoading[activeWooLang] ? "#AEAEB2" : "#0071E3",
+                                  color: "#FFFFFF",
+                                  border: "none",
+                                  borderRadius: 10,
+                                  fontSize: 13,
+                                  fontWeight: 600,
+                                  cursor: wooLangLoading[activeWooLang] ? "not-allowed" : "pointer",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  fontFamily: "inherit",
+                                  transition: "background 0.15s ease",
+                                }}
+                              >
+                                {wooLangLoading[activeWooLang] ? (
+                                  <>
+                                    <svg className="animate-spin" width={13} height={13} fill="none" viewBox="0 0 24 24">
+                                      <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    Translating to {activeLang.name}…
+                                  </>
+                                ) : (
+                                  `Generate ${activeLang.name}`
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
