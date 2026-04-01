@@ -23,6 +23,18 @@ interface UploadedImage {
   name: string;
 }
 
+interface NewsletterData {
+  subject: string;
+  preview_text: string;
+  hero_headline: string;
+  intro: string;
+  feature_highlights: { icon: string; title: string; description: string }[];
+  compatible_vehicles: string;
+  cta_text: string;
+  signoff: string;
+  plain_text: string;
+}
+
 interface GeneratedData {
   amazon: {
     title: string;
@@ -56,6 +68,7 @@ interface GeneratedData {
   line: { message: string };
   reddit: { title: string; body: string };
   ai_recommendation: { suggestions: string[]; blurb: string };
+  newsletter?: NewsletterData;
 }
 
 const CATEGORIES = [
@@ -65,8 +78,17 @@ const CATEGORIES = [
   "DAB Dongle",
   "Camera",
 ];
-const TABS = ["Marketplaces", "Social Content", "AI Picks"] as const;
+const TABS = ["Marketplaces", "Social Content", "AI Picks", "Newsletter"] as const;
 type Tab = (typeof TABS)[number];
+
+const NEWSLETTER_TONES = [
+  { id: "friendly", label: "Friendly", emoji: "😊" },
+  { id: "professional", label: "Professional", emoji: "💼" },
+  { id: "excited", label: "Excited", emoji: "🚀" },
+  { id: "educational", label: "Educational", emoji: "📚" },
+  { id: "luxury", label: "Luxury", emoji: "✨" },
+] as const;
+type NewsletterTone = typeof NEWSLETTER_TONES[number]["id"];
 
 // ─── Image compression helper ─────────────────────────────────────────────────
 async function compressImage(file: File, maxWidth = 1200): Promise<{ base64: string; mediaType: string }> {
@@ -430,6 +452,9 @@ export default function Home() {
   const [generatedData, setGeneratedData] = useState<GeneratedData | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("Marketplaces");
   const [language] = useState("EN");
+  const [newsletterTone, setNewsletterTone] = useState<NewsletterTone>("friendly");
+  const [newsletterLoading, setNewsletterLoading] = useState(false);
+  const [newsletterToneChanged, setNewsletterToneChanged] = useState(false);
 
   // URL import state
   const [importUrl, setImportUrl] = useState("");
@@ -610,16 +635,38 @@ export default function Home() {
           ...formData,
           language,
           images: imagesPayload,
+          newsletterTone,
         }),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Generation failed");
       setGeneratedData(json.data);
+      setNewsletterToneChanged(false);
       setActiveTab("Marketplaces");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRegenerateNewsletter = async () => {
+    if (!generatedData) return;
+    setNewsletterLoading(true);
+    try {
+      const res = await fetch("/api/newsletter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...formData, newsletterTone }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "Newsletter regeneration failed");
+      setGeneratedData((prev) => prev ? { ...prev, newsletter: json.data } : prev);
+      setNewsletterToneChanged(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setNewsletterLoading(false);
     }
   };
 
@@ -1260,8 +1307,8 @@ export default function Home() {
                     onClick={() => setActiveTab(tab)}
                     style={{
                       flex: 1,
-                      padding: "13px 16px",
-                      fontSize: 14,
+                      padding: "13px 12px",
+                      fontSize: 13,
                       fontWeight: 500,
                       color: activeTab === tab ? "#0071E3" : "#6E6E73",
                       background: "none",
@@ -1271,9 +1318,10 @@ export default function Home() {
                       transition: "color 0.15s ease",
                       fontFamily: "inherit",
                       letterSpacing: "-0.1px",
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    {tab}
+                    {tab === "Newsletter" ? "✉️ Newsletter" : tab}
                   </button>
                 ))}
               </div>
@@ -1532,6 +1580,253 @@ export default function Home() {
                     </div>
                     <Field label="Amazon-Style Recommendation Blurb" value={generatedData.ai_recommendation.blurb} />
                   </Card>
+                </div>
+              )}
+
+              {/* ── Newsletter ── */}
+              {activeTab === "Newsletter" && (
+                <div>
+                  {/* Tone Selector */}
+                  <div
+                    style={{
+                      background: "#FFFFFF",
+                      border: "1px solid #E5E5E7",
+                      borderRadius: 12,
+                      padding: "16px",
+                      marginBottom: 20,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                        Email Tone
+                      </span>
+                      {newsletterToneChanged && generatedData.newsletter && (
+                        <button
+                          onClick={handleRegenerateNewsletter}
+                          disabled={newsletterLoading}
+                          style={{
+                            height: 32,
+                            padding: "0 14px",
+                            background: newsletterLoading ? "#AEAEB2" : "#0071E3",
+                            color: "#FFFFFF",
+                            border: "none",
+                            borderRadius: 8,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            cursor: newsletterLoading ? "not-allowed" : "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            fontFamily: "inherit",
+                            transition: "background 0.15s ease",
+                          }}
+                        >
+                          {newsletterLoading ? (
+                            <>
+                              <svg className="animate-spin" width={12} height={12} fill="none" viewBox="0 0 24 24">
+                                <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                              Regenerating…
+                            </>
+                          ) : (
+                            "↻ Regenerate Newsletter"
+                          )}
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {NEWSLETTER_TONES.map((tone) => (
+                        <button
+                          key={tone.id}
+                          onClick={() => {
+                            setNewsletterTone(tone.id);
+                            if (generatedData.newsletter) setNewsletterToneChanged(true);
+                          }}
+                          style={{
+                            padding: "7px 14px",
+                            borderRadius: 20,
+                            border: "none",
+                            fontSize: 13,
+                            fontWeight: 500,
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                            transition: "all 0.15s ease",
+                            background: newsletterTone === tone.id ? "#0071E3" : "#F5F5F7",
+                            color: newsletterTone === tone.id ? "#FFFFFF" : "#1d1d1f",
+                          }}
+                        >
+                          {tone.emoji} {tone.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {!generatedData.newsletter && (
+                    <div
+                      style={{
+                        background: "#FFFFFF",
+                        border: "1px solid #E5E5E7",
+                        borderRadius: 12,
+                        padding: "32px",
+                        textAlign: "center",
+                        color: "#6E6E73",
+                        fontSize: 14,
+                      }}
+                    >
+                      <div style={{ fontSize: 32, marginBottom: 8 }}>✉️</div>
+                      <p style={{ fontWeight: 500, color: "#1d1d1f", marginBottom: 4 }}>No newsletter generated yet</p>
+                      <p style={{ fontSize: 13 }}>Click &quot;Generate All Listings&quot; to generate a newsletter alongside all other content.</p>
+                    </div>
+                  )}
+
+                  {generatedData.newsletter && (() => {
+                    const nl = generatedData.newsletter!;
+                    const fullNewsletter = [
+                      `Subject: ${nl.subject}`,
+                      `Preview: ${nl.preview_text}`,
+                      ``,
+                      `${nl.hero_headline}`,
+                      ``,
+                      nl.intro,
+                      ``,
+                      `Features:`,
+                      ...nl.feature_highlights.map((f) => `${f.icon} ${f.title}: ${f.description}`),
+                      ``,
+                      `Compatible Vehicles: ${nl.compatible_vehicles}`,
+                      ``,
+                      `CTA: ${nl.cta_text}`,
+                      ``,
+                      nl.signoff,
+                      ``,
+                      `--- PLAIN TEXT ---`,
+                      nl.plain_text,
+                    ].join("\n");
+
+                    return (
+                      <div>
+                        {/* Copy Full Newsletter */}
+                        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+                          <CopyButton text={fullNewsletter} label="📋 Copy Full Newsletter" className="!opacity-100 !text-sm !px-4 !py-2" />
+                        </div>
+
+                        {/* Subject + Preview */}
+                        <Card title="📧 Email Header">
+                          <Field label="Subject Line" value={nl.subject} />
+                          <Field label="Preview Text (~80 chars)" value={nl.preview_text} />
+                        </Card>
+
+                        {/* Hero */}
+                        <Card title="🦸 Hero Section">
+                          <Field label="Hero Headline" value={nl.hero_headline} />
+                          <Field label="Introduction" value={nl.intro} />
+                        </Card>
+
+                        {/* Feature Highlights */}
+                        <div
+                          style={{
+                            background: "#FFFFFF",
+                            border: "1px solid #E5E5E7",
+                            borderRadius: 12,
+                            overflow: "hidden",
+                            marginBottom: 16,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              padding: "12px 16px",
+                              borderBottom: "1px solid #E5E5E7",
+                              background: "#FAFAFA",
+                            }}
+                          >
+                            <span style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f" }}>⚡ Feature Highlights</span>
+                            <CopyButton
+                              text={nl.feature_highlights.map((f) => `${f.icon} ${f.title}\n${f.description}`).join("\n\n")}
+                              label="Copy all"
+                              className="!opacity-100"
+                            />
+                          </div>
+                          <div style={{ padding: 16 }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                              {nl.feature_highlights.map((f, i) => (
+                                <div
+                                  key={i}
+                                  style={{
+                                    background: "#F5F5F7",
+                                    borderRadius: 10,
+                                    padding: "14px",
+                                    position: "relative",
+                                  }}
+                                >
+                                  <div style={{ fontSize: 24, marginBottom: 8 }}>{f.icon}</div>
+                                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1d1d1f", marginBottom: 4 }}>{f.title}</div>
+                                  <div style={{ fontSize: 12, color: "#6E6E73", lineHeight: 1.5 }}>{f.description}</div>
+                                  <div style={{ marginTop: 10 }}>
+                                    <CopyButton text={`${f.icon} ${f.title}\n${f.description}`} />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Footer details */}
+                        <Card title="🚗 Footer & CTA">
+                          <Field label="Compatible Vehicles" value={nl.compatible_vehicles} />
+                          <Field label="CTA Button Text" value={nl.cta_text} />
+                          <Field label="Sign-off" value={nl.signoff} />
+                        </Card>
+
+                        {/* Plain Text */}
+                        <div
+                          style={{
+                            background: "#FFFFFF",
+                            border: "1px solid #E5E5E7",
+                            borderRadius: 12,
+                            overflow: "hidden",
+                            marginBottom: 16,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              padding: "12px 16px",
+                              borderBottom: "1px solid #E5E5E7",
+                              background: "#FAFAFA",
+                            }}
+                          >
+                            <span style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f" }}>📄 Plain Text Version</span>
+                            <CopyButton text={nl.plain_text} label="Copy all" className="!opacity-100" />
+                          </div>
+                          <div style={{ padding: 16 }}>
+                            <textarea
+                              readOnly
+                              value={nl.plain_text}
+                              rows={10}
+                              style={{
+                                width: "100%",
+                                background: "#F5F5F7",
+                                border: "none",
+                                borderRadius: 10,
+                                padding: "10px 12px",
+                                fontSize: 13,
+                                color: "#1d1d1f",
+                                lineHeight: 1.6,
+                                resize: "vertical",
+                                fontFamily: "monospace",
+                                outline: "none",
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>

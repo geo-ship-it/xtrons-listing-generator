@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
       sellingPoints,
       language = "EN",
       images = [] as ImageInput[],
+      newsletterTone = "friendly",
     } = body;
 
     const hasImages = images && images.length > 0;
@@ -46,7 +47,7 @@ Selling Points: ${sellingPoints}
 ${hasImages ? "\nProduct images provided — analyse them to extract visible features, text, design details." : ""}
 
 Return ONLY a raw JSON object (no markdown, no code blocks, no explanation). Use this exact structure:
-{"amazon":{"title":"","bullets":["","","","",""],"keywords":"","description":""},"ebay":{"title":"","description":"","specifics":{"Brand":"XTRONS","Model":"","Compatibility":"","Screen Size":"","Connectivity":""}},"aliexpress":{"title":"","description":""},"yahoo_jp":{"title":"","description":""},"rakuten":{"title":"","description":""},"woocommerce":{"title":"","short_description":"","long_description":"","meta_title":"","meta_description":""},"facebook":{"post":""},"youtube":{"title":"","description":"","tags":"","script_outline":""},"twitter":{"thread":["","",""]},"line":{"message":""},"reddit":{"title":"","body":""},"ai_recommendation":{"suggestions":["","",""],"blurb":""}}
+{"amazon":{"title":"","bullets":["","","","",""],"keywords":"","description":""},"ebay":{"title":"","description":"","specifics":{"Brand":"XTRONS","Model":"","Compatibility":"","Screen Size":"","Connectivity":""}},"aliexpress":{"title":"","description":""},"yahoo_jp":{"title":"","description":""},"rakuten":{"title":"","description":""},"woocommerce":{"title":"","short_description":"","long_description":"","meta_title":"","meta_description":""},"facebook":{"post":""},"youtube":{"title":"","description":"","tags":"","script_outline":""},"twitter":{"thread":["","",""]},"line":{"message":""},"reddit":{"title":"","body":""},"ai_recommendation":{"suggestions":["","",""],"blurb":""},"newsletter":{"subject":"","preview_text":"","hero_headline":"","intro":"","feature_highlights":[{"icon":"⚡","title":"","description":""},{"icon":"📱","title":"","description":""},{"icon":"🔊","title":"","description":""}],"compatible_vehicles":"","cta_text":"","signoff":"","plain_text":""}}
 
 Rules:
 - Amazon title: max 200 chars, include car model, features, XTRONS brand
@@ -57,6 +58,14 @@ Rules:
 - Facebook post: engaging with emojis and CTA
 - AI recommendations: 2-3 complementary XTRONS accessories based on category
 - All content in English (language toggle coming later)
+- Newsletter tone: ${newsletterTone} — write the entire newsletter in this tone
+  - friendly: warm, conversational, personal, like writing to a friend who loves cars
+  - professional: formal, authoritative, B2B-appropriate, for distributors and trade buyers
+  - excited: high energy, emojis, exclamation points, launch energy, promo vibe
+  - educational: detailed explanations, helpful tips, informative, for tech-curious buyers
+  - luxury: premium language, aspirational, sophisticated, no exclamation points
+- Newsletter preview_text: ~80 chars, the snippet shown in email clients
+- Newsletter plain_text: stripped plain text version of the full email body
 - CRITICAL: Return ONLY the JSON object, nothing else`;
 
     type AllowedMediaType = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
