@@ -107,7 +107,7 @@ Extract the following information and return as valid JSON only, no other text:
   "sku": "model number or SKU code if visible",
   "category": "one of: Car Stereo, Roof Monitor, Accessory, DAB Dongle, Camera",
   "keyFeatures": "list of key features, one per line",
-  "compatibleCars": "list of compatible car makes/models/years",
+  "compatibleCars": "Extract the COMPLETE and DETAILED list of compatible vehicles. Each car model MUST start with 'For '. Include chassis codes (W166, X166, F30, etc.), all trim variants in parentheses, year ranges, and any system specifications (e.g. NTG 4.5, NBT, MIB system). Format each on a new line. Example: 'For Mercedes-Benz M-Class W166 (ML350 ML400 ML550 ML63 AMG) 2012-2015 with NTG 4.5 or NTG 4.7 System'. Extract ALL compatible vehicles listed on the page, do not summarise or omit any.",
   "screenSize": "screen size if applicable, e.g. 9 inch",
   "ramRom": "RAM and ROM if applicable, e.g. 4GB RAM 64GB ROM",
   "price": "price as number only in GBP, e.g. 299.99",

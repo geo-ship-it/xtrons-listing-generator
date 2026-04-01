@@ -59,13 +59,20 @@ interface NewsletterData {
 
 interface GeneratedData {
   amazon: {
-    title: string;
+    titles: string[];
+    title?: string; // legacy fallback
     bullets: string[];
     keywords: string;
     description: string;
   };
   ebay: {
-    title: string;
+    titles: {
+      UK: string[];
+      US: string[];
+      AU: string[];
+      DE: string[];
+    };
+    title?: string; // legacy fallback
     description: string;
     specifics: Record<string, string>;
   };
@@ -468,6 +475,8 @@ export default function Home() {
   const [generatedData, setGeneratedData] = useState<GeneratedData | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("Marketplaces");
   const [language] = useState("EN");
+  const [titleVariations, setTitleVariations] = useState(3);
+  const [activeEbayMarket, setActiveEbayMarket] = useState<"UK" | "US" | "AU" | "DE">("UK");
   const [newsletterTone, setNewsletterTone] = useState<NewsletterTone>("friendly");
   const [newsletterLoading, setNewsletterLoading] = useState(false);
   const [newsletterToneChanged, setNewsletterToneChanged] = useState(false);
@@ -657,6 +666,7 @@ export default function Home() {
           language,
           images: imagesPayload,
           newsletterTone,
+          titleVariations,
         }),
       });
       const json = await res.json();
@@ -1087,6 +1097,32 @@ export default function Home() {
               />
             </InputField>
 
+            <InputField label="Title Variations" hint="(per market)">
+              <div style={{ display: "flex", gap: 6 }}>
+                {[1, 3, 5, 10].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setTitleVariations(n)}
+                    style={{
+                      flex: 1,
+                      padding: "8px 0",
+                      borderRadius: 8,
+                      border: "none",
+                      fontSize: 13,
+                      fontWeight: titleVariations === n ? 700 : 500,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                      transition: "all 0.15s ease",
+                      background: titleVariations === n ? "#0071E3" : "#F5F5F7",
+                      color: titleVariations === n ? "#FFFFFF" : "#1d1d1f",
+                    }}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </InputField>
+
             <InputField label="Category">
               <SelectInput
                 name="category"
@@ -1369,19 +1405,44 @@ export default function Home() {
               {activeTab === "Marketplaces" && (
                 <div>
                   {/* Amazon */}
+                  {(() => {
+                    const amazonTitles: string[] = Array.isArray(generatedData.amazon.titles)
+                      ? generatedData.amazon.titles
+                      : generatedData.amazon.title
+                      ? [generatedData.amazon.title]
+                      : [""];
+                    return (
                   <Card
                     title="🛒 Amazon UK"
                     copyText={[
-                      `Title: ${generatedData.amazon.title}`,
+                      `Titles:\n${amazonTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}`,
                       `\nBullets:\n${generatedData.amazon.bullets.map((b, i) => `${i + 1}. ${b}`).join("\n")}`,
                       `\nKeywords: ${generatedData.amazon.keywords}`,
                       `\nDescription: ${generatedData.amazon.description}`,
                     ].join("")}
                   >
-                    <Field
-                      label={`Title · ${generatedData.amazon.title.length}/200 chars`}
-                      value={generatedData.amazon.title}
-                    />
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                          Title Variation{amazonTitles.length > 1 ? "s" : ""} · max 200 chars
+                        </span>
+                        <CopyButton text={amazonTitles.join("\n")} label="Copy all" className="!opacity-100" />
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {amazonTitles.map((t, i) => (
+                          <div key={i} className="field-row" style={{ display: "flex", alignItems: "flex-start", gap: 10, background: "#F5F5F7", borderRadius: 10, padding: "10px 12px" }}>
+                            {amazonTitles.length > 1 && (
+                              <span style={{ color: "#0071E3", fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 2 }}>V{i + 1}</span>
+                            )}
+                            <span style={{ fontSize: 13, color: "#1d1d1f", flex: 1, lineHeight: 1.5 }}>{t}</span>
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
+                              <CopyButton text={t} />
+                              <span style={{ fontSize: 10, color: t.length > 200 ? "#FF3B30" : "#AEAEB2" }}>{t.length}/200</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                     <div style={{ marginBottom: 16 }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                         <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
@@ -1417,45 +1478,119 @@ export default function Home() {
                     <Field label="Search Terms / Keywords" value={generatedData.amazon.keywords} />
                     <Field label="Description" value={generatedData.amazon.description} />
                   </Card>
+                    );
+                  })()}
 
                   {/* eBay */}
-                  <Card
-                    title="🏪 eBay"
-                    copyText={`Title: ${generatedData.ebay.title}\n\nDescription:\n${generatedData.ebay.description}`}
-                  >
-                    <Field label={`Title · ${generatedData.ebay.title.length}/80 chars`} value={generatedData.ebay.title} />
-                    <Field label="Item Description" value={generatedData.ebay.description} />
-                    <div style={{ marginBottom: 4 }}>
+                  {(() => {
+                    const ebayTitlesMap = generatedData.ebay.titles || {
+                      UK: [generatedData.ebay.title || ""],
+                      US: [generatedData.ebay.title || ""],
+                      AU: [generatedData.ebay.title || ""],
+                      DE: [generatedData.ebay.title || ""],
+                    };
+                    const markets = [
+                      { key: "UK" as const, flag: "🇬🇧", label: "UK" },
+                      { key: "US" as const, flag: "🇺🇸", label: "US" },
+                      { key: "AU" as const, flag: "🇦🇺", label: "AU" },
+                      { key: "DE" as const, flag: "🇩🇪", label: "DE" },
+                    ];
+                    const activeTitles: string[] = Array.isArray(ebayTitlesMap[activeEbayMarket])
+                      ? ebayTitlesMap[activeEbayMarket]
+                      : [String(ebayTitlesMap[activeEbayMarket] || "")];
+
+                    return (
+                  <div style={{ background: "#FFFFFF", border: "1px solid #E5E5E7", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+                    {/* Card header */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid #E5E5E7", background: "#FAFAFA" }}>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f" }}>🏪 eBay</span>
+                      <CopyButton text={`Titles:\n${activeTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}\n\nDescription:\n${generatedData.ebay.description}`} label="Copy all" className="!opacity-100" />
+                    </div>
+
+                    {/* Market tabs */}
+                    <div style={{ display: "flex", gap: 0, padding: "0 16px", borderBottom: "1px solid #E5E5E7", background: "#FAFAFA" }}>
+                      {markets.map((m) => (
+                        <button
+                          key={m.key}
+                          onClick={() => setActiveEbayMarket(m.key)}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 4,
+                            padding: "9px 14px", fontSize: 13, fontWeight: activeEbayMarket === m.key ? 600 : 400,
+                            color: activeEbayMarket === m.key ? "#1d1d1f" : "#AEAEB2",
+                            background: "none", border: "none",
+                            borderBottom: activeEbayMarket === m.key ? "2px solid #0071E3" : "2px solid transparent",
+                            cursor: "pointer", transition: "all 0.15s ease", fontFamily: "inherit",
+                          }}
+                        >
+                          <span style={{ fontSize: 16 }}>{m.flag}</span>
+                          <span>{m.label}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Titles for active market */}
+                    <div style={{ padding: "16px 16px 0" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                         <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
-                          Item Specifics
+                          Title Variation{activeTitles.length > 1 ? "s" : ""} · 75–80 chars
                         </span>
-                        <CopyButton
-                          text={Object.entries(generatedData.ebay.specifics).map(([k, v]) => `${k}: ${v}`).join("\n")}
-                          label="Copy all"
-                          className="!opacity-100"
-                        />
+                        <CopyButton text={activeTitles.join("\n")} label="Copy all" className="!opacity-100" />
                       </div>
-                      <div style={{ border: "1px solid #E5E5E7", borderRadius: 10, overflow: "hidden" }}>
-                        {Object.entries(generatedData.ebay.specifics).map(([key, value], i) => (
-                          <div
-                            key={i}
-                            style={{
-                              display: "flex",
-                              borderBottom: i < Object.keys(generatedData.ebay.specifics).length - 1 ? "1px solid #E5E5E7" : "none",
-                            }}
-                          >
-                            <span style={{ fontSize: 13, color: "#6E6E73", padding: "9px 12px", width: 130, flexShrink: 0, borderRight: "1px solid #E5E5E7", background: "#FAFAFA" }}>
-                              {key}
-                            </span>
-                            <span style={{ fontSize: 13, color: "#1d1d1f", padding: "9px 12px", flex: 1 }}>
-                              {value}
-                            </span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+                        {activeTitles.map((t, i) => (
+                          <div key={i} className="field-row" style={{ display: "flex", alignItems: "flex-start", gap: 10, background: "#F5F5F7", borderRadius: 10, padding: "10px 12px" }}>
+                            {activeTitles.length > 1 && (
+                              <span style={{ color: "#0071E3", fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 2 }}>V{i + 1}</span>
+                            )}
+                            <span style={{ fontSize: 13, color: "#1d1d1f", flex: 1, lineHeight: 1.5 }}>{t}</span>
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
+                              <CopyButton text={t} />
+                              <span style={{ fontSize: 10, color: t.length < 75 ? "#FF9500" : t.length > 80 ? "#FF3B30" : "#34C759", fontWeight: 600 }}>
+                                {t.length}/80
+                              </span>
+                            </div>
                           </div>
                         ))}
                       </div>
                     </div>
-                  </Card>
+
+                    {/* Description and specifics (shared) */}
+                    <div style={{ padding: "0 16px 16px" }}>
+                      <Field label="Item Description" value={generatedData.ebay.description} />
+                      <div style={{ marginBottom: 4 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                            Item Specifics
+                          </span>
+                          <CopyButton
+                            text={Object.entries(generatedData.ebay.specifics).map(([k, v]) => `${k}: ${v}`).join("\n")}
+                            label="Copy all"
+                            className="!opacity-100"
+                          />
+                        </div>
+                        <div style={{ border: "1px solid #E5E5E7", borderRadius: 10, overflow: "hidden" }}>
+                          {Object.entries(generatedData.ebay.specifics).map(([key, value], i) => (
+                            <div
+                              key={i}
+                              style={{
+                                display: "flex",
+                                borderBottom: i < Object.keys(generatedData.ebay.specifics).length - 1 ? "1px solid #E5E5E7" : "none",
+                              }}
+                            >
+                              <span style={{ fontSize: 13, color: "#6E6E73", padding: "9px 12px", width: 130, flexShrink: 0, borderRight: "1px solid #E5E5E7", background: "#FAFAFA" }}>
+                                {key}
+                              </span>
+                              <span style={{ fontSize: 13, color: "#1d1d1f", padding: "9px 12px", flex: 1 }}>
+                                {value}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                    );
+                  })()}
 
                   {/* AliExpress */}
                   <Card
