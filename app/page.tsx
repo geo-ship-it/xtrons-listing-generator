@@ -113,6 +113,228 @@ const NEWSLETTER_TONES = [
 ] as const;
 type NewsletterTone = typeof NEWSLETTER_TONES[number]["id"];
 
+// ─── Refinement Bar ───────────────────────────────────────────────────────────
+const REFINE_BUTTONS = [
+  { id: "engaging", label: "More Engaging", emoji: "🔥" },
+  { id: "professional", label: "More Professional", emoji: "💼" },
+  { id: "seo", label: "SEO Boost", emoji: "📈" },
+  { id: "ai_search", label: "AI Search Optimised", emoji: "🤖" },
+  { id: "concise", label: "Concise", emoji: "✂️" },
+] as const;
+
+function RefinementBar({
+  onRefine,
+  onUndo,
+  hasPrevious,
+  isLoading,
+  customText,
+  onCustomTextChange,
+  showRufus = false,
+}: {
+  onRefine: (type: string, customPrompt?: string) => void;
+  onUndo: () => void;
+  hasPrevious: boolean;
+  isLoading: boolean;
+  customText: string;
+  onCustomTextChange: (v: string) => void;
+  showRufus?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [activeBtn, setActiveBtn] = useState<string | null>(null);
+
+  // Reset active button when loading finishes
+  if (!isLoading && activeBtn !== null) {
+    // Will be handled by effect, but we clear on next render
+  }
+
+  const handleClick = (type: string) => {
+    setActiveBtn(type);
+    onRefine(type);
+  };
+
+  const handleCustomRefine = () => {
+    if (!customText.trim()) return;
+    setActiveBtn("custom");
+    onRefine("custom", customText);
+  };
+
+  return (
+    <div style={{ marginTop: 8, marginBottom: 4 }}>
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "10px 14px",
+          background: expanded ? "#EAF3FF" : "#F5F5F7",
+          border: `1px solid ${expanded ? "#C7DFFE" : "#E5E5E7"}`,
+          borderRadius: expanded ? "10px 10px 0 0" : 10,
+          cursor: "pointer",
+          fontFamily: "inherit",
+          transition: "all 0.15s ease",
+        }}
+      >
+        <span style={{ fontSize: 13, fontWeight: 600, color: expanded ? "#0071E3" : "#1d1d1f" }}>
+          ✨ Refine this listing
+        </span>
+        <span style={{ fontSize: 11, color: "#AEAEB2" }}>{expanded ? "▲" : "▼"}</span>
+      </button>
+
+      {expanded && (
+        <div
+          style={{
+            border: "1px solid #C7DFFE",
+            borderTop: "none",
+            borderRadius: "0 0 10px 10px",
+            padding: "14px",
+            background: "#FAFEFF",
+          }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73", marginBottom: 8 }}>
+            Quick Tones
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+            {REFINE_BUTTONS.map((btn) => (
+              <button
+                key={btn.id}
+                onClick={() => handleClick(btn.id)}
+                disabled={isLoading}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "6px 12px",
+                  borderRadius: 20,
+                  border: "1px solid #C7DFFE",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: isLoading ? "not-allowed" : "pointer",
+                  fontFamily: "inherit",
+                  transition: "all 0.15s ease",
+                  background: isLoading && activeBtn === btn.id ? "#AEAEB2" : "#EAF3FF",
+                  color: isLoading && activeBtn === btn.id ? "#FFFFFF" : "#0071E3",
+                  opacity: isLoading && activeBtn !== btn.id ? 0.5 : 1,
+                }}
+              >
+                {isLoading && activeBtn === btn.id ? (
+                  <svg className="animate-spin" width={11} height={11} fill="none" viewBox="0 0 24 24">
+                    <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <span>{btn.emoji}</span>
+                )}
+                {btn.label}
+              </button>
+            ))}
+            {showRufus && (
+              <button
+                onClick={() => handleClick("rufus")}
+                disabled={isLoading}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "6px 12px",
+                  borderRadius: 20,
+                  border: "1px solid #D1B4FF",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: isLoading ? "not-allowed" : "pointer",
+                  fontFamily: "inherit",
+                  transition: "all 0.15s ease",
+                  background: isLoading && activeBtn === "rufus" ? "#AEAEB2" : "#F3EEFF",
+                  color: isLoading && activeBtn === "rufus" ? "#FFFFFF" : "#7C3AED",
+                  opacity: isLoading && activeBtn !== "rufus" ? 0.5 : 1,
+                }}
+              >
+                {isLoading && activeBtn === "rufus" ? (
+                  <svg className="animate-spin" width={11} height={11} fill="none" viewBox="0 0 24 24">
+                    <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : "✦ "}
+                Amazon Rufus
+              </button>
+            )}
+          </div>
+
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73", marginBottom: 6 }}>
+            Custom instruction
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              type="text"
+              value={customText}
+              onChange={(e) => onCustomTextChange(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleCustomRefine(); }}
+              placeholder='e.g. "make it more technical"'
+              disabled={isLoading}
+              style={{
+                flex: 1,
+                background: "#F5F5F7",
+                border: "1px solid #E5E5E7",
+                borderRadius: 8,
+                padding: "7px 10px",
+                fontSize: 13,
+                color: "#1d1d1f",
+                outline: "none",
+                fontFamily: "inherit",
+              }}
+            />
+            <button
+              onClick={handleCustomRefine}
+              disabled={isLoading || !customText.trim()}
+              style={{
+                padding: "7px 14px",
+                background: isLoading || !customText.trim() ? "#E5E5E7" : "#0071E3",
+                color: isLoading || !customText.trim() ? "#AEAEB2" : "#FFFFFF",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: isLoading || !customText.trim() ? "not-allowed" : "pointer",
+                fontFamily: "inherit",
+                transition: "all 0.15s ease",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {isLoading && activeBtn === "custom" ? "…" : "Refine →"}
+            </button>
+          </div>
+
+          {hasPrevious && (
+            <div style={{ marginTop: 10 }}>
+              <button
+                onClick={onUndo}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "6px 12px",
+                  background: "transparent",
+                  border: "1px solid #E5E5E7",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  color: "#6E6E73",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                ↩ Undo refinement
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Image compression helper ─────────────────────────────────────────────────
 async function compressImage(file: File, maxWidth = 1200): Promise<{ base64: string; mediaType: string }> {
   return new Promise((resolve, reject) => {
@@ -486,6 +708,12 @@ export default function Home() {
   const [wooLangLoading, setWooLangLoading] = useState<Record<string, boolean>>({});
   const [activeWooLang, setActiveWooLang] = useState<WooLangCode>("EN");
 
+  // Refinement state (per platform)
+  const [refinedContent, setRefinedContent] = useState<Record<string, unknown>>({});
+  const [previousContent, setPreviousContent] = useState<Record<string, unknown>>({});
+  const [refineLoading, setRefineLoading] = useState<Record<string, boolean>>({});
+  const [customRefineText, setCustomRefineText] = useState<Record<string, string>>({});
+
   // URL import state
   const [importUrl, setImportUrl] = useState("");
   const [importing, setImporting] = useState(false);
@@ -645,6 +873,59 @@ export default function Home() {
     []
   );
 
+  const handleRefine = async (platform: string, currentContent: unknown, refinementType: string, customPrompt?: string) => {
+    if (!generatedData) return;
+    setRefineLoading((prev) => ({ ...prev, [platform]: true }));
+    setPreviousContent((prev) => ({ ...prev, [platform]: currentContent }));
+    try {
+      const res = await fetch("/api/refine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform,
+          currentContent,
+          refinementType,
+          customPrompt,
+          productContext: {
+            productName: formData.productName,
+            category: formData.category,
+            compatibleCars: formData.compatibleCars,
+            keyFeatures: formData.keyFeatures,
+          },
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "Refinement failed");
+      setRefinedContent((prev) => ({ ...prev, [platform]: json.data }));
+      // Merge refined content back into generatedData
+      setGeneratedData((prev) => {
+        if (!prev) return prev;
+        return { ...prev, [platform]: json.data };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Refinement failed");
+    } finally {
+      setRefineLoading((prev) => ({ ...prev, [platform]: false }));
+    }
+  };
+
+  const handleUndoRefine = (platform: string, originalContent: unknown) => {
+    setGeneratedData((prev) => {
+      if (!prev) return prev;
+      return { ...prev, [platform]: originalContent };
+    });
+    setRefinedContent((prev) => {
+      const n = { ...prev };
+      delete n[platform];
+      return n;
+    });
+    setPreviousContent((prev) => {
+      const n = { ...prev };
+      delete n[platform];
+      return n;
+    });
+  };
+
   const handleGenerate = async () => {
     if (!formData.productName) {
       setError("Product name is required.");
@@ -676,6 +957,10 @@ export default function Home() {
       setActiveTab("Marketplaces");
       setWooTranslations({});
       setActiveWooLang("EN");
+      setRefinedContent({});
+      setPreviousContent({});
+      setRefineLoading({});
+      setCustomRefineText({});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -1412,6 +1697,7 @@ export default function Home() {
                       ? [generatedData.amazon.title]
                       : [""];
                     return (
+                  <>
                   <Card
                     title="🛒 Amazon UK"
                     copyText={[
@@ -1478,6 +1764,16 @@ export default function Home() {
                     <Field label="Search Terms / Keywords" value={generatedData.amazon.keywords} />
                     <Field label="Description" value={generatedData.amazon.description} />
                   </Card>
+                  <RefinementBar
+                    onRefine={(type, custom) => handleRefine("amazon", generatedData.amazon, type, custom)}
+                    onUndo={() => handleUndoRefine("amazon", previousContent["amazon"])}
+                    hasPrevious={!!previousContent["amazon"]}
+                    isLoading={!!refineLoading["amazon"]}
+                    customText={customRefineText["amazon"] || ""}
+                    onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, amazon: v }))}
+                    showRufus={true}
+                  />
+                  </>
                     );
                   })()}
 
@@ -1500,6 +1796,7 @@ export default function Home() {
                       : [String(ebayTitlesMap[activeEbayMarket] || "")];
 
                     return (
+                  <>
                   <div style={{ background: "#FFFFFF", border: "1px solid #E5E5E7", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
                     {/* Card header */}
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid #E5E5E7", background: "#FAFAFA" }}>
@@ -1589,6 +1886,15 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
+                  <RefinementBar
+                    onRefine={(type, custom) => handleRefine("ebay", generatedData.ebay, type, custom)}
+                    onUndo={() => handleUndoRefine("ebay", previousContent["ebay"])}
+                    hasPrevious={!!previousContent["ebay"]}
+                    isLoading={!!refineLoading["ebay"]}
+                    customText={customRefineText["ebay"] || ""}
+                    onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, ebay: v }))}
+                  />
+                  </>
                     );
                   })()}
 
@@ -1643,6 +1949,7 @@ export default function Home() {
                       : undefined;
 
                     return (
+                      <>
                       <div
                         style={{
                           background: "#FFFFFF",
@@ -1765,6 +2072,15 @@ export default function Home() {
                           )}
                         </div>
                       </div>
+                  <RefinementBar
+                    onRefine={(type, custom) => handleRefine("woocommerce", generatedData.woocommerce, type, custom)}
+                    onUndo={() => handleUndoRefine("woocommerce", previousContent["woocommerce"])}
+                    hasPrevious={!!previousContent["woocommerce"]}
+                    isLoading={!!refineLoading["woocommerce"]}
+                    customText={customRefineText["woocommerce"] || ""}
+                    onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, woocommerce: v }))}
+                  />
+                      </>
                     );
                   })()}
                 </div>
@@ -1834,6 +2150,14 @@ export default function Home() {
                     <Field label="Post Title · r/CarAV · r/CarPlay · r/AndroidAuto" value={generatedData.reddit.title} />
                     <Field label="Post Body" value={generatedData.reddit.body} />
                   </Card>
+                  <RefinementBar
+                    onRefine={(type, custom) => handleRefine("facebook", generatedData.facebook, type, custom)}
+                    onUndo={() => handleUndoRefine("facebook", previousContent["facebook"])}
+                    hasPrevious={!!previousContent["facebook"]}
+                    isLoading={!!refineLoading["facebook"]}
+                    customText={customRefineText["facebook"] || ""}
+                    onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, facebook: v }))}
+                  />
                 </div>
               )}
 
