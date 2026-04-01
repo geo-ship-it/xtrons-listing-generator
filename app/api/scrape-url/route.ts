@@ -99,7 +99,7 @@ async function extractProductData(content: string) {
   const prompt = `You are extracting product information from a webpage for an automotive electronics product listing tool.
 
 Here is the webpage content:
-${content.slice(0, 12000)}
+${content.slice(0, 20000)}
 
 Extract the following information and return as valid JSON only, no other text:
 {
@@ -119,7 +119,7 @@ If any field cannot be determined, use an empty string. For price, convert to GB
 
   const message = await client.messages.create({
     model: "claude-haiku-4-5",
-    max_tokens: 1024,
+    max_tokens: 2048,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -131,7 +131,16 @@ If any field cannot be determined, use an empty string. For price, convert to GB
     jsonText = jsonText.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
   }
 
-  return JSON.parse(jsonText);
+  // Sanitise: strip control chars, find JSON boundaries
+  const start = jsonText.indexOf('{');
+  const end = jsonText.lastIndexOf('}');
+  if (start !== -1 && end !== -1) jsonText = jsonText.slice(start, end + 1);
+  try {
+    return JSON.parse(jsonText);
+  } catch {
+    const fixed = jsonText.replace(/[\x00-\x1F\x7F]/g, (c: string) => c === '\n' ? '\\n' : c === '\t' ? '\\t' : '');
+    return JSON.parse(fixed);
+  }
 }
 
 export async function POST(request: NextRequest) {
