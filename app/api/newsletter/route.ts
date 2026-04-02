@@ -1,8 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const client = new OpenAI({
+  baseURL: "https://api.deepseek.com",
+  apiKey: process.env.DEEPSEEK_API_KEY || "sk-9011d468ebed4d28be7eeda8b1232ba1",
 });
 
 export async function POST(request: NextRequest) {
@@ -58,20 +59,17 @@ Rules:
 - plain_text: full plain text version of the email (stripped, for email clients that don't render HTML)
 - CRITICAL: Return ONLY the JSON object, nothing else`;
 
-    const message = await client.messages.create({
-      model: "claude-haiku-4-5",
+    const message = await client.chat.completions.create({
+      model: "deepseek-chat",
       max_tokens: 2048,
       messages: [{ role: "user", content: promptText }],
     });
 
-    const responseContent = message.content[0];
-    if (responseContent.type !== "text") {
-      throw new Error("Unexpected response type from Claude");
-    }
+    const responseText = message.choices[0]?.message?.content || "";
 
     let parsed;
     try {
-      let jsonText = responseContent.text.trim();
+      let jsonText = responseText.trim();
       jsonText = jsonText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "");
       const start = jsonText.indexOf("{");
       const end = jsonText.lastIndexOf("}");

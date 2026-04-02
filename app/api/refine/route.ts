@@ -1,8 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const client = new OpenAI({
+  baseURL: "https://api.deepseek.com",
+  apiKey: process.env.DEEPSEEK_API_KEY || "sk-9011d468ebed4d28be7eeda8b1232ba1",
 });
 
 function parseJsonSafe(text: string): unknown {
@@ -89,18 +90,15 @@ ${JSON.stringify(currentContent, null, 2)}
 
 Rewrite and return the refined version of this content in EXACTLY the same JSON structure and field names. Keep all fields present. Return ONLY the raw JSON object, no markdown, no explanation.`;
 
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
+    const message = await client.chat.completions.create({
+      model: "deepseek-chat",
       max_tokens: 8192,
       messages: [{ role: "user", content: prompt }],
     });
 
-    const responseContent = message.content[0];
-    if (responseContent.type !== "text") {
-      throw new Error("Unexpected response type from Claude");
-    }
+    const responseText = message.choices[0]?.message?.content || "";
 
-    const refined = parseJsonSafe(responseContent.text);
+    const refined = parseJsonSafe(responseText);
     return NextResponse.json({ success: true, data: refined });
   } catch (error) {
     console.error("Refine API error:", error);

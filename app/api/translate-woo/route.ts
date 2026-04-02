@@ -1,8 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const client = new OpenAI({
+  baseURL: "https://api.deepseek.com",
+  apiKey: process.env.DEEPSEEK_API_KEY || "sk-9011d468ebed4d28be7eeda8b1232ba1",
 });
 
 interface WooContent {
@@ -39,20 +40,17 @@ ${JSON.stringify(wooContent, null, 2)}
 
 Return ONLY valid JSON with the exact same structure (title, short_description, long_description, meta_title, meta_description). No markdown, no code blocks, no explanation — just the raw JSON object.`;
 
-    const message = await client.messages.create({
-      model: "claude-haiku-4-5",
+    const message = await client.chat.completions.create({
+      model: "deepseek-chat",
       max_tokens: 4096,
       messages: [{ role: "user", content: promptText }],
     });
 
-    const responseContent = message.content[0];
-    if (responseContent.type !== "text") {
-      throw new Error("Unexpected response type from Claude");
-    }
+    const responseText = message.choices[0]?.message?.content || "";
 
     let parsed: WooContent;
     try {
-      let jsonText = responseContent.text.trim();
+      let jsonText = responseText.trim();
       jsonText = jsonText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "");
       const start = jsonText.indexOf("{");
       const end = jsonText.lastIndexOf("}");

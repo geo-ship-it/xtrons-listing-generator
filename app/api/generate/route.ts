@@ -1,8 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const client = new OpenAI({
+  baseURL: "https://api.deepseek.com",
+  apiKey: process.env.DEEPSEEK_API_KEY || "sk-9011d468ebed4d28be7eeda8b1232ba1",
 });
 
 interface ImageInput {
@@ -121,55 +122,44 @@ Rules:
 - Compatible cars in listings: always use "For [Brand]" format
 - CRITICAL: Return ONLY the JSON object, nothing else`;
 
-    type AllowedMediaType = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
-    type ContentBlock =
-      | { type: "image"; source: { type: "base64"; media_type: AllowedMediaType; data: string } }
-      | { type: "text"; text: string };
+    // Build OpenAI-compatible content (DeepSeek uses OpenAI API format)
+    type OAIContent = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 
-    // Build content for call 1 (with images for marketplace data)
-    const content1: ContentBlock[] = [];
+    const content1: OAIContent[] = [];
     if (hasImages) {
       for (const img of images as ImageInput[]) {
         content1.push({
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: img.mediaType as AllowedMediaType,
-            data: img.base64,
-          },
+          type: "image_url",
+          image_url: { url: `data:${img.mediaType};base64,${img.base64}` }
         });
       }
     }
     content1.push({ type: "text", text: prompt1 });
 
-    const content2: ContentBlock[] = [{ type: "text", text: prompt2 }];
+    const content2: OAIContent[] = [{ type: "text", text: prompt2 }];
 
-    const MODEL = "claude-sonnet-4-6";
+    const MODEL = "deepseek-chat";
     const MAX_TOKENS = 16000;
 
     // Run both calls in parallel
     const [message1, message2] = await Promise.all([
-      client.messages.create({
+      client.chat.completions.create({
         model: MODEL,
         max_tokens: MAX_TOKENS,
         messages: [{ role: "user", content: content1 }],
       }),
-      client.messages.create({
+      client.chat.completions.create({
         model: MODEL,
         max_tokens: MAX_TOKENS,
         messages: [{ role: "user", content: content2 }],
       }),
     ]);
 
-    const responseContent1 = message1.content[0];
-    const responseContent2 = message2.content[0];
+    const responseText1 = message1.choices[0]?.message?.content || "";
+    const responseText2 = message2.choices[0]?.message?.content || "";
 
-    if (responseContent1.type !== "text" || responseContent2.type !== "text") {
-      throw new Error("Unexpected response type from Claude");
-    }
-
-    const parsed1 = parseJsonSafe(responseContent1.text) as Record<string, unknown>;
-    const parsed2 = parseJsonSafe(responseContent2.text) as Record<string, unknown>;
+    const parsed1 = parseJsonSafe(responseText1) as Record<string, unknown>;
+    const parsed2 = parseJsonSafe(responseText2) as Record<string, unknown>;
 
     // Merge results
     const parsed = { ...parsed1, ...parsed2 } as Record<string, unknown>;

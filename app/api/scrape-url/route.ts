@@ -1,8 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const client = new OpenAI({
+  baseURL: "https://api.deepseek.com",
+  apiKey: process.env.DEEPSEEK_API_KEY || "sk-9011d468ebed4d28be7eeda8b1232ba1",
 });
 
 const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY || "fc-cad0afe772e445ca8b49123646a1d036";
@@ -117,21 +118,14 @@ Extract the following information and return as valid JSON only, no other text:
 
 If any field cannot be determined, use an empty string. For price, convert to GBP if in another currency (use approximate rate). Always return valid JSON.`;
 
-  const message = await client.messages.create({
-    model: "claude-haiku-4-5",
+  const message = await client.chat.completions.create({
+    model: "deepseek-chat",
     max_tokens: 2048,
     messages: [{ role: "user", content: prompt }],
   });
 
-  const text = message.content[0];
-  if (text.type !== "text") throw new Error("Unexpected response type");
-
-  let jsonText = text.text.trim();
-  if (jsonText.startsWith("```")) {
-    jsonText = jsonText.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-  }
-
-  // Sanitise: strip control chars, find JSON boundaries
+  let jsonText = (message.choices[0]?.message?.content || "").trim();
+  jsonText = jsonText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
   const start = jsonText.indexOf('{');
   const end = jsonText.lastIndexOf('}');
   if (start !== -1 && end !== -1) jsonText = jsonText.slice(start, end + 1);
