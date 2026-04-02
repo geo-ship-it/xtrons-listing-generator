@@ -79,10 +79,14 @@ Generate optimised listings for this XTRONS product for marketplace platforms.
 ${productContext}
 
 Return ONLY a raw JSON object (no markdown, no code blocks, no explanation). Use this exact structure:
-{"amazon":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"ebay":{"titles":{"UK":["","",""],"US":["","",""],"AU":["","",""],"DE":["","",""]},"description_en":"","description_de":"","specifics":{"Brand":"XTRONS","Model":"","Compatibility":"","Screen Size":"","Connectivity":""}},"aliexpress":{"title":"","description":""},"yahoo_jp":{"title":"","description":""},"rakuten":{"title":"","description":""},"woocommerce":{"title":"","short_description":"","long_description":"","meta_title":"","meta_description":""}}
+{"amazon":{"UK":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"US":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"DE":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"JP":{"title_jp":"","title_en":"","bullets_jp":["","","","",""],"keywords_jp":"","description_jp":""}},"ebay":{"titles":{"UK":["","",""],"US":["","",""],"AU":["","",""],"DE":["","",""]},"description_en":"","description_de":"","specifics":{"Brand":"XTRONS","Model":"","Compatibility":"","Screen Size":"","Connectivity":""}},"aliexpress":{"title":"","description":""},"yahoo_jp":{"title":"","description":""},"rakuten":{"title":"","description":""},"woocommerce":{"title":"","short_description":"","long_description":"","meta_title":"","meta_description":""}}
 
 Rules:
-- Amazon titles: generate an array of EXACTLY ${numVariations} title variation(s), each max 200 chars with different keyword emphasis, including car model, features, XTRONS brand
+- Amazon UK: English. Title max 200 chars. 5 bullets starting with ALL CAPS benefit. British automotive language.
+- Amazon US: American English. Title max 200 chars. Use "head unit", "car stereo", focus on CarPlay/Android Auto appeal. American spellings.
+- Amazon DE: FULLY in German (Deutsch). Title max 200 chars. Use "Android Autoradio", "Einbaunavigation", "Autoradio". 5 bullets in German. Keywords: German search terms (e.g. "Autoradio Android", "BMW Navi Einbau"). Description in German.
+- Amazon JP: FULLY in Japanese (日本語). title_jp max 150 chars. All bullets in Japanese. keywords_jp: Japanese search terms. description_jp in Japanese.
+- Generate ${numVariations} title variation(s) per Amazon market (titles array in each UK/US/DE market)
 - eBay titles: generate 4 market-specific arrays, each with EXACTLY ${numVariations} variation(s), every title MUST be 75-80 characters (count carefully, never less than 75):
   - UK: Use British English, mention "Android Car Stereo", UK-relevant specs
   - US: Use American English, mention "Android Head Unit", focus on CarPlay/Android Auto
@@ -93,16 +97,14 @@ Rules:
 - Keywords: comma-separated SEO terms
 - WooCommerce long_description: Use simple HTML only — <p> paragraphs and <ul><li> lists. No complex nested elements. Keep under 600 words.
 - LANGUAGE RULES (strictly enforce):
-  - Amazon UK, eBay UK/US/AU, AliExpress, WooCommerce: English
+  - Amazon UK/US, eBay UK/US/AU, AliExpress, WooCommerce: English
   - eBay DE title AND description AND specifics: FULLY in German (Deutsch) — use natural German automotive language throughout
-  - Amazon DE (if added): FULLY in German
   - yahoo_jp title AND description: FULLY in Japanese (日本語) — natural Japanese for Japanese car buyers
   - rakuten title AND description: FULLY in Japanese (日本語)
-  - amazon_jp ALL fields (title_jp, bullets_jp, keywords_jp, description_jp): FULLY in Japanese (日本語)
   - yahoo_auction ALL fields: FULLY in Japanese (日本語)
 - eBay DE description: Write a full product description in German. Use German automotive terminology. Include key specs, compatibility, and features in German.
 - Compatible cars in listings: always use "For [Brand]" format (e.g. "For BMW 3 Series F30 (320i 330i 340i) 2012-2019")
-- CRITICAL: amazon.titles MUST be an array of ${numVariations} string(s), ebay.titles.UK/US/AU/DE MUST each be an array of ${numVariations} string(s)
+- CRITICAL: amazon.UK.titles, amazon.US.titles, amazon.DE.titles MUST each be an array of ${numVariations} string(s), ebay.titles.UK/US/AU/DE MUST each be an array of ${numVariations} string(s)
 - CRITICAL: Return ONLY the JSON object, nothing else`;
 
     // ── Prompt 2: Social/Content data ───────────────────────────────────────────
@@ -112,7 +114,7 @@ Generate optimised social and content listings for this XTRONS product.
 ${productContext}
 
 Return ONLY a raw JSON object (no markdown, no code blocks, no explanation). Use this exact structure:
-{"facebook":{"post":""},"youtube":{"title":"","description":"","tags":"","script_outline":""},"twitter":{"thread":["","",""]},"line":{"message":""},"reddit":{"title":"","body":""},"ai_recommendation":{"suggestions":["","",""],"blurb":""},"newsletter":{"subject":"","preview_text":"","hero_headline":"","intro":"","feature_highlights":[{"icon":"⚡","title":"","description":""},{"icon":"📱","title":"","description":""},{"icon":"🔊","title":"","description":""}],"compatible_vehicles":"","cta_text":"","signoff":"","plain_text":""},"amazon_jp":{"title_jp":"","title_en":"","bullets_jp":["","","","",""],"keywords_jp":"","description_jp":""},"yahoo_auction":{"title":"","condition":"新品","category":"","starting_price":"","description":"","tags":""}}
+{"facebook":{"post":""},"youtube":{"title":"","description":"","tags":"","script_outline":""},"twitter":{"thread":["","",""]},"line":{"message":""},"reddit":{"title":"","body":""},"ai_recommendation":{"suggestions":["","",""],"blurb":""},"newsletter":{"subject":"","preview_text":"","hero_headline":"","intro":"","feature_highlights":[{"icon":"⚡","title":"","description":""},{"icon":"📱","title":"","description":""},{"icon":"🔊","title":"","description":""}],"compatible_vehicles":"","cta_text":"","signoff":"","plain_text":""},"yahoo_auction":{"title":"","condition":"新品","category":"","starting_price":"","description":"","tags":""}}
 
 Rules:
 - Twitter thread: exactly 3 tweets max 280 chars each
@@ -127,7 +129,6 @@ Rules:
 - Newsletter preview_text: ~80 chars, the snippet shown in email clients
 - Newsletter plain_text: stripped plain text version of the full email body
 - Compatible cars in listings: always use "For [Brand]" format
-- amazon_jp: Write ENTIRELY in Japanese (日本語). title_jp max 150 Japanese chars. All bullets in Japanese. Use proper automotive Japanese terminology. Include 商品説明 section in description_jp. keywords_jp: Japanese search terms car buyers use on Amazon.co.jp. title_en: English title variant for Amazon JP.
 - yahoo_auction title: STRICT max 65 Japanese characters. Format: [状態][商品名][対応車種][特徴] e.g. "新品 XTRONS 9インチ Android14 BMW F30 F31用 カーナビ ワイヤレスCarPlay 4G"
 - yahoo_auction description: Full Japanese HTML description with clearly labelled sections: 商品説明, 商品仕様, 対応車種, 発送について (standard: ヤマト運輸またはゆうパックにて発送。落札後3営業日以内に発送いたします。), 注意事項
 - yahoo_auction category: Most specific Yahoo Auction category path for car stereos in Japanese (e.g. 自動車・オートバイ > カーナビ・カーエレクトロニクス > カーナビ本体)
@@ -177,15 +178,27 @@ Rules:
     // Merge results
     const parsed = { ...parsed1, ...parsed2 } as Record<string, unknown>;
 
-    // Normalize: ensure titles are arrays (backwards compat if model returns string)
+    // Normalize: ensure amazon titles are arrays per market (backwards compat if model returns flat/string)
     const amazon = parsed?.amazon as Record<string, unknown> | undefined;
     if (amazon) {
-      if (typeof amazon.title === "string" && !Array.isArray(amazon.titles)) {
-        amazon.titles = [amazon.title];
-        delete amazon.title;
+      // New multi-market format: normalize each market's titles array
+      for (const market of ["UK", "US", "DE"]) {
+        const mkt = amazon[market] as Record<string, unknown> | undefined;
+        if (mkt) {
+          if (typeof mkt.titles === "string") mkt.titles = [mkt.titles];
+          else if (!Array.isArray(mkt.titles)) mkt.titles = [""];
+        }
       }
-      if (!Array.isArray(amazon.titles)) {
-        amazon.titles = [amazon.title || ""];
+      // Legacy flat format fallback: wrap flat amazon into UK market
+      if (!amazon.UK && !amazon.US && !amazon.DE) {
+        if (typeof amazon.title === "string" && !Array.isArray(amazon.titles)) {
+          amazon.titles = [amazon.title];
+          delete amazon.title;
+        }
+        if (!Array.isArray(amazon.titles)) {
+          amazon.titles = [String(amazon.titles || "")];
+        }
+        amazon.UK = { titles: amazon.titles, bullets: amazon.bullets, keywords: amazon.keywords, description: amazon.description };
       }
     }
 

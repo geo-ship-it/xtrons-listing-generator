@@ -57,14 +57,35 @@ interface NewsletterData {
   plain_text: string;
 }
 
+interface AmazonMarketData {
+  titles: string[];
+  bullets: string[];
+  keywords: string;
+  description: string;
+}
+interface AmazonJPData {
+  title_jp: string;
+  title_en: string;
+  bullets_jp: string[];
+  keywords_jp: string;
+  description_jp: string;
+}
+interface AmazonData {
+  // New multi-market format
+  UK?: AmazonMarketData;
+  US?: AmazonMarketData;
+  DE?: AmazonMarketData;
+  JP?: AmazonJPData;
+  // Legacy flat format (backward compat)
+  titles?: string[];
+  title?: string;
+  bullets?: string[];
+  keywords?: string;
+  description?: string;
+}
+
 interface GeneratedData {
-  amazon: {
-    titles: string[];
-    title?: string; // legacy fallback
-    bullets: string[];
-    keywords: string;
-    description: string;
-  };
+  amazon: AmazonData;
   ebay: {
     titles: {
       UK: string[];
@@ -92,13 +113,6 @@ interface GeneratedData {
   reddit: { title: string; body: string };
   ai_recommendation: { suggestions: string[]; blurb: string };
   newsletter?: NewsletterData;
-  amazon_jp?: {
-    title_jp: string;
-    title_en: string;
-    bullets_jp: string[];
-    keywords_jp: string;
-    description_jp: string;
-  };
   yahoo_auction?: {
     title: string;
     condition: string;
@@ -714,6 +728,7 @@ export default function Home() {
   const [language] = useState("EN");
   const [titleVariations, setTitleVariations] = useState(3);
   const [activeEbayMarket, setActiveEbayMarket] = useState<"UK" | "US" | "AU" | "DE">("UK");
+  const [activeAmazonMarket, setActiveAmazonMarket] = useState<"UK" | "US" | "DE" | "JP">("UK");
   const [newsletterTone, setNewsletterTone] = useState<NewsletterTone>("friendly");
   const [newsletterLoading, setNewsletterLoading] = useState(false);
   const [newsletterToneChanged, setNewsletterToneChanged] = useState(false);
@@ -1704,91 +1719,211 @@ export default function Home() {
               {/* ── Marketplaces ── */}
               {activeTab === "Marketplaces" && (
                 <div>
-                  {/* Amazon */}
+                  {/* Amazon — Multi-Market Tabs */}
                   {(() => {
-                    const amazonTitles: string[] = Array.isArray(generatedData.amazon.titles)
-                      ? generatedData.amazon.titles
-                      : generatedData.amazon.title
-                      ? [generatedData.amazon.title]
-                      : [""];
+                    const amazonMarkets = [
+                      { key: "UK" as const, flag: "🇬🇧", label: "UK" },
+                      { key: "US" as const, flag: "🇺🇸", label: "US" },
+                      { key: "DE" as const, flag: "🇩🇪", label: "DE" },
+                      { key: "JP" as const, flag: "🇯🇵", label: "JP" },
+                    ];
+
+                    // Resolve active market data
+                    const amz = generatedData.amazon;
+                    // For JP tab
+                    const jpData = amz.JP as AmazonJPData | undefined;
+                    // For UK/US/DE — new format or legacy fallback
+                    const getMarketData = (mkt: "UK" | "US" | "DE"): AmazonMarketData | null => {
+                      if (amz[mkt]) return amz[mkt] as AmazonMarketData;
+                      // Legacy flat format: treat as UK
+                      if (mkt === "UK" && (amz.titles || amz.title)) {
+                        return {
+                          titles: Array.isArray(amz.titles) ? amz.titles : [amz.title || ""],
+                          bullets: Array.isArray(amz.bullets) ? amz.bullets : [],
+                          keywords: amz.keywords || "",
+                          description: amz.description || "",
+                        };
+                      }
+                      return null;
+                    };
+
+                    const activeMarketData = activeAmazonMarket !== "JP" ? getMarketData(activeAmazonMarket) : null;
+
+                    // Labels per market
+                    const isDE = activeAmazonMarket === "DE";
+                    const isJP = activeAmazonMarket === "JP";
+                    const titleLabel = isDE ? "Titel" : isJP ? "タイトル" : "Title Variation";
+                    const bulletsLabel = isDE ? "Stichpunkte" : isJP ? "箇条書き" : "Bullet Points";
+                    const keywordsLabel = isDE ? "Schlüsselwörter" : isJP ? "キーワード" : "Search Terms / Keywords";
+                    const descLabel = isDE ? "Beschreibung" : isJP ? "商品説明" : "Description";
+
+                    // Copy text for active tab
+                    let copyText = "";
+                    if (isJP && jpData) {
+                      copyText = [
+                        `Japanese Title: ${jpData.title_jp}`,
+                        `\nEnglish Title: ${jpData.title_en}`,
+                        `\nBullets (JP):\n${(jpData.bullets_jp || []).map((b, i) => `${i+1}. ${b}`).join("\n")}`,
+                        `\nKeywords (JP): ${jpData.keywords_jp}`,
+                        `\nDescription (JP): ${jpData.description_jp}`,
+                      ].join("");
+                    } else if (activeMarketData) {
+                      copyText = [
+                        `Titles:\n${activeMarketData.titles.map((t, i) => `${i + 1}. ${t}`).join("\n")}`,
+                        `\nBullets:\n${activeMarketData.bullets.map((b, i) => `${i + 1}. ${b}`).join("\n")}`,
+                        `\nKeywords: ${activeMarketData.keywords}`,
+                        `\nDescription: ${activeMarketData.description}`,
+                      ].join("");
+                    }
+
                     return (
-                  <>
-                  <Card
-                    title="🛒 Amazon UK"
-                    copyText={[
-                      `Titles:\n${amazonTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}`,
-                      `\nBullets:\n${generatedData.amazon.bullets.map((b, i) => `${i + 1}. ${b}`).join("\n")}`,
-                      `\nKeywords: ${generatedData.amazon.keywords}`,
-                      `\nDescription: ${generatedData.amazon.description}`,
-                    ].join("")}
-                  >
-                    <div style={{ marginBottom: 16 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
-                          Title Variation{amazonTitles.length > 1 ? "s" : ""} · max 200 chars
-                        </span>
-                        <CopyButton text={amazonTitles.join("\n")} label="Copy all" className="!opacity-100" />
+                    <>
+                    <div style={{ background: "#FFFFFF", border: "1px solid #E5E5E7", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+                      {/* Card header */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid #E5E5E7", background: "#FAFAFA" }}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f" }}>📦 Amazon</span>
+                        {copyText && <CopyButton text={copyText} label="Copy all" className="!opacity-100" />}
                       </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        {amazonTitles.map((t, i) => (
-                          <div key={i} className="field-row" style={{ display: "flex", alignItems: "flex-start", gap: 10, background: "#F5F5F7", borderRadius: 10, padding: "10px 12px" }}>
-                            {amazonTitles.length > 1 && (
-                              <span style={{ color: "#0071E3", fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 2 }}>V{i + 1}</span>
-                            )}
-                            <span style={{ fontSize: 13, color: "#1d1d1f", flex: 1, lineHeight: 1.5 }}>{t}</span>
-                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
-                              <CopyButton text={t} />
-                              <span style={{ fontSize: 10, color: t.length > 200 ? "#FF3B30" : "#AEAEB2" }}>{t.length}/200</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div style={{ marginBottom: 16 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
-                          5 Bullet Points
-                        </span>
-                        <CopyButton text={generatedData.amazon.bullets.join("\n")} label="Copy all" className="!opacity-100" />
-                      </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        {generatedData.amazon.bullets.map((bullet, i) => (
-                          <div
-                            key={i}
-                            className="field-row"
+
+                      {/* Market tabs */}
+                      <div style={{ display: "flex", gap: 0, padding: "0 16px", borderBottom: "1px solid #E5E5E7", background: "#FAFAFA" }}>
+                        {amazonMarkets.map((m) => (
+                          <button
+                            key={m.key}
+                            onClick={() => setActiveAmazonMarket(m.key)}
                             style={{
-                              display: "flex",
-                              alignItems: "flex-start",
-                              gap: 10,
-                              background: "#F5F5F7",
-                              borderRadius: 10,
-                              padding: "10px 12px",
+                              display: "flex", alignItems: "center", gap: 4,
+                              padding: "9px 14px", fontSize: 13, fontWeight: activeAmazonMarket === m.key ? 600 : 400,
+                              color: activeAmazonMarket === m.key ? "#1d1d1f" : "#AEAEB2",
+                              background: "none", border: "none",
+                              borderBottom: activeAmazonMarket === m.key ? "2px solid #0071E3" : "2px solid transparent",
+                              cursor: "pointer", transition: "all 0.15s ease", fontFamily: "inherit",
                             }}
                           >
-                            <span style={{ color: "#0071E3", fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 2 }}>
-                              {i + 1}
-                            </span>
-                            <span style={{ fontSize: 13, color: "#1d1d1f", flex: 1, lineHeight: 1.5 }}>
-                              {bullet}
-                            </span>
-                            <CopyButton text={bullet} />
-                          </div>
+                            <span style={{ fontSize: 16 }}>{m.flag}</span>
+                            <span>{m.label}</span>
+                          </button>
                         ))}
                       </div>
+
+                      {/* Tab content */}
+                      <div style={{ padding: "16px" }}>
+                        {isJP && jpData ? (
+                          <>
+                            <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
+                              🇯🇵 日本語コンテンツ — Amazon.co.jp向けに最適化
+                            </div>
+                            {/* JP Title */}
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                                  {titleLabel} (JP) · max 150 chars
+                                </span>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <span style={{ fontSize: 10, color: jpData.title_jp.length > 150 ? "#FF3B30" : "#AEAEB2" }}>{jpData.title_jp.length}/150</span>
+                                  <CopyButton text={jpData.title_jp} />
+                                </div>
+                              </div>
+                              <div style={{ background: "#F5F5F7", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: "#1d1d1f", lineHeight: 1.6 }}>
+                                {jpData.title_jp}
+                              </div>
+                            </div>
+                            <Field label="English Title Variant" value={jpData.title_en} />
+                            {/* JP Bullets */}
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                                  {bulletsLabel} (5)
+                                </span>
+                                <CopyButton text={(jpData.bullets_jp || []).join("\n")} label="Copy all" className="!opacity-100" />
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                {(jpData.bullets_jp || []).map((bullet, i) => (
+                                  <div key={i} className="field-row" style={{ display: "flex", alignItems: "flex-start", gap: 10, background: "#F5F5F7", borderRadius: 10, padding: "10px 12px" }}>
+                                    <span style={{ color: "#0071E3", fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 2 }}>{i + 1}</span>
+                                    <span style={{ fontSize: 13, color: "#1d1d1f", flex: 1, lineHeight: 1.6 }}>{bullet}</span>
+                                    <CopyButton text={bullet} />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <Field label={`${keywordsLabel} (日本語)`} value={jpData.keywords_jp} />
+                            <Field label={descLabel} value={jpData.description_jp} />
+                          </>
+                        ) : activeMarketData ? (
+                          <>
+                            {isDE && (
+                              <div style={{ marginBottom: 10, padding: "6px 10px", background: "#E8F4F8", borderRadius: 8, fontSize: 12, color: "#1A6B8A", fontWeight: 500 }}>
+                                🇩🇪 Deutschsprachiger Inhalt — optimiert für Amazon.de
+                              </div>
+                            )}
+                            {/* Titles */}
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                                  {titleLabel}{activeMarketData.titles.length > 1 ? (isDE ? " (Varianten)" : " Variations") : ""} · max 200 chars
+                                </span>
+                                <CopyButton text={activeMarketData.titles.join("\n")} label="Copy all" className="!opacity-100" />
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                {activeMarketData.titles.map((t, i) => (
+                                  <div key={i} className="field-row" style={{ display: "flex", alignItems: "flex-start", gap: 10, background: "#F5F5F7", borderRadius: 10, padding: "10px 12px" }}>
+                                    {activeMarketData.titles.length > 1 && (
+                                      <span style={{ color: "#0071E3", fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 2 }}>V{i + 1}</span>
+                                    )}
+                                    <span style={{ fontSize: 13, color: "#1d1d1f", flex: 1, lineHeight: 1.5 }}>{t}</span>
+                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
+                                      <CopyButton text={t} />
+                                      <span style={{ fontSize: 10, color: t.length > 200 ? "#FF3B30" : "#AEAEB2" }}>{t.length}/200</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            {/* Bullets */}
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                                  {bulletsLabel} (5)
+                                </span>
+                                <CopyButton text={activeMarketData.bullets.join("\n")} label="Copy all" className="!opacity-100" />
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                {activeMarketData.bullets.map((bullet, i) => (
+                                  <div key={i} className="field-row" style={{ display: "flex", alignItems: "flex-start", gap: 10, background: "#F5F5F7", borderRadius: 10, padding: "10px 12px" }}>
+                                    <span style={{ color: "#0071E3", fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 2 }}>{i + 1}</span>
+                                    <span style={{ fontSize: 13, color: "#1d1d1f", flex: 1, lineHeight: 1.5 }}>{bullet}</span>
+                                    <CopyButton text={bullet} />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <Field label={keywordsLabel} value={activeMarketData.keywords} />
+                            <Field label={descLabel} value={activeMarketData.description} />
+                          </>
+                        ) : (
+                          <div style={{ textAlign: "center", padding: "24px 16px", color: "#6E6E73", fontSize: 14 }}>
+                            No data for this market. Try regenerating.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Refinement bar — only UK and US get Rufus */}
+                      {!isJP && !isDE && (
+                        <div style={{ padding: "0 16px 16px" }}>
+                          <RefinementBar
+                            onRefine={(type, custom) => handleRefine("amazon", generatedData.amazon, type, custom)}
+                            onUndo={() => handleUndoRefine("amazon", previousContent["amazon"])}
+                            hasPrevious={!!previousContent["amazon"]}
+                            isLoading={!!refineLoading["amazon"]}
+                            customText={customRefineText["amazon"] || ""}
+                            onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, amazon: v }))}
+                            showRufus={true}
+                          />
+                        </div>
+                      )}
                     </div>
-                    <Field label="Search Terms / Keywords" value={generatedData.amazon.keywords} />
-                    <Field label="Description" value={generatedData.amazon.description} />
-                  </Card>
-                  <RefinementBar
-                    onRefine={(type, custom) => handleRefine("amazon", generatedData.amazon, type, custom)}
-                    onUndo={() => handleUndoRefine("amazon", previousContent["amazon"])}
-                    hasPrevious={!!previousContent["amazon"]}
-                    isLoading={!!refineLoading["amazon"]}
-                    customText={customRefineText["amazon"] || ""}
-                    onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, amazon: v }))}
-                    showRufus={true}
-                  />
-                  </>
+                    </>
                     );
                   })()}
 
@@ -1951,78 +2086,7 @@ export default function Home() {
                     <Field label="Description (日本語)" value={generatedData.rakuten.description} />
                   </Card>
 
-                  {/* Amazon JP */}
-                  {generatedData.amazon_jp && (() => {
-                    const ajp = generatedData.amazon_jp!;
-                    const bullets = Array.isArray(ajp.bullets_jp) ? ajp.bullets_jp : [];
-                    return (
-                      <>
-                      <Card
-                        title="🇯🇵 Amazon Japan (amazon.co.jp)"
-                        copyText={[
-                          `Japanese Title: ${ajp.title_jp}`,
-                          `\nEnglish Title: ${ajp.title_en}`,
-                          `\nBullets (JP):\n${bullets.map((b, i) => `${i+1}. ${b}`).join("\n")}`,
-                          `\nKeywords (JP): ${ajp.keywords_jp}`,
-                          `\nDescription (JP): ${ajp.description_jp}`,
-                        ].join("")}
-                      >
-                        <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
-                          🇯🇵 Japanese content — optimised for Amazon.co.jp
-                        </div>
 
-                        {/* Japanese Title */}
-                        <div style={{ marginBottom: 16 }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
-                              Japanese Title · max 150 chars
-                            </span>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <span style={{ fontSize: 10, color: ajp.title_jp.length > 150 ? "#FF3B30" : "#AEAEB2" }}>{ajp.title_jp.length}/150</span>
-                              <CopyButton text={ajp.title_jp} />
-                            </div>
-                          </div>
-                          <div style={{ background: "#F5F5F7", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: "#1d1d1f", lineHeight: 1.6 }}>
-                            {ajp.title_jp}
-                          </div>
-                        </div>
-
-                        {/* English Title */}
-                        <Field label="English Title Variant" value={ajp.title_en} />
-
-                        {/* Bullets in JP */}
-                        <div style={{ marginBottom: 16 }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
-                              5 Bullet Points (日本語)
-                            </span>
-                            <CopyButton text={bullets.join("\n")} label="Copy all" className="!opacity-100" />
-                          </div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {bullets.map((bullet, i) => (
-                              <div key={i} className="field-row" style={{ display: "flex", alignItems: "flex-start", gap: 10, background: "#F5F5F7", borderRadius: 10, padding: "10px 12px" }}>
-                                <span style={{ color: "#0071E3", fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 2 }}>{i + 1}</span>
-                                <span style={{ fontSize: 13, color: "#1d1d1f", flex: 1, lineHeight: 1.6 }}>{bullet}</span>
-                                <CopyButton text={bullet} />
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <Field label="Keywords (日本語・カンマ区切り)" value={ajp.keywords_jp} />
-                        <Field label="商品説明 / Description (日本語)" value={ajp.description_jp} />
-                      </Card>
-                      <RefinementBar
-                        onRefine={(type, custom) => handleRefine("amazon_jp", generatedData.amazon_jp, type, custom)}
-                        onUndo={() => handleUndoRefine("amazon_jp", previousContent["amazon_jp"])}
-                        hasPrevious={!!previousContent["amazon_jp"]}
-                        isLoading={!!refineLoading["amazon_jp"]}
-                        customText={customRefineText["amazon_jp"] || ""}
-                        onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, amazon_jp: v }))}
-                      />
-                      </>
-                    );
-                  })()}
 
                   {/* Yahoo Auction */}
                   {generatedData.yahoo_auction && (() => {
