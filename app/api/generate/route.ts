@@ -139,7 +139,7 @@ Rules:
     const content2: OAIContent[] = [{ type: "text", text: prompt2 }];
 
     const MODEL = "deepseek-chat";
-    const MAX_TOKENS = 16000;
+    const MAX_TOKENS = 8192;
 
     // Run both calls in parallel
     const [message1, message2] = await Promise.all([
