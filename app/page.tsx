@@ -92,6 +92,21 @@ interface GeneratedData {
   reddit: { title: string; body: string };
   ai_recommendation: { suggestions: string[]; blurb: string };
   newsletter?: NewsletterData;
+  amazon_jp?: {
+    title_jp: string;
+    title_en: string;
+    bullets_jp: string[];
+    keywords_jp: string;
+    description_jp: string;
+  };
+  yahoo_auction?: {
+    title: string;
+    condition: string;
+    category: string;
+    starting_price: string;
+    description: string;
+    tags: string;
+  };
 }
 
 const CATEGORIES = [
@@ -1851,9 +1866,14 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* Description and specifics (shared) */}
+                    {/* Description — show German for DE market */}
                     <div style={{ padding: "0 16px 16px" }}>
-                      <Field label="Item Description" value={generatedData.ebay.description} />
+                      <Field 
+                        label={activeEbayMarket === "DE" ? "Artikelbeschreibung (Deutsch)" : "Item Description"} 
+                        value={activeEbayMarket === "DE" && (generatedData.ebay as any).description_de 
+                          ? (generatedData.ebay as any).description_de 
+                          : generatedData.ebay.description} 
+                      />
                       <div style={{ marginBottom: 4 }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
@@ -1930,6 +1950,215 @@ export default function Home() {
                     <Field label="Title (日本語)" value={generatedData.rakuten.title} />
                     <Field label="Description (日本語)" value={generatedData.rakuten.description} />
                   </Card>
+
+                  {/* Amazon JP */}
+                  {generatedData.amazon_jp && (() => {
+                    const ajp = generatedData.amazon_jp!;
+                    const bullets = Array.isArray(ajp.bullets_jp) ? ajp.bullets_jp : [];
+                    return (
+                      <>
+                      <Card
+                        title="🇯🇵 Amazon Japan (amazon.co.jp)"
+                        copyText={[
+                          `Japanese Title: ${ajp.title_jp}`,
+                          `\nEnglish Title: ${ajp.title_en}`,
+                          `\nBullets (JP):\n${bullets.map((b, i) => `${i+1}. ${b}`).join("\n")}`,
+                          `\nKeywords (JP): ${ajp.keywords_jp}`,
+                          `\nDescription (JP): ${ajp.description_jp}`,
+                        ].join("")}
+                      >
+                        <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
+                          🇯🇵 Japanese content — optimised for Amazon.co.jp
+                        </div>
+
+                        {/* Japanese Title */}
+                        <div style={{ marginBottom: 16 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                              Japanese Title · max 150 chars
+                            </span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{ fontSize: 10, color: ajp.title_jp.length > 150 ? "#FF3B30" : "#AEAEB2" }}>{ajp.title_jp.length}/150</span>
+                              <CopyButton text={ajp.title_jp} />
+                            </div>
+                          </div>
+                          <div style={{ background: "#F5F5F7", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: "#1d1d1f", lineHeight: 1.6 }}>
+                            {ajp.title_jp}
+                          </div>
+                        </div>
+
+                        {/* English Title */}
+                        <Field label="English Title Variant" value={ajp.title_en} />
+
+                        {/* Bullets in JP */}
+                        <div style={{ marginBottom: 16 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                              5 Bullet Points (日本語)
+                            </span>
+                            <CopyButton text={bullets.join("\n")} label="Copy all" className="!opacity-100" />
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {bullets.map((bullet, i) => (
+                              <div key={i} className="field-row" style={{ display: "flex", alignItems: "flex-start", gap: 10, background: "#F5F5F7", borderRadius: 10, padding: "10px 12px" }}>
+                                <span style={{ color: "#0071E3", fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 2 }}>{i + 1}</span>
+                                <span style={{ fontSize: 13, color: "#1d1d1f", flex: 1, lineHeight: 1.6 }}>{bullet}</span>
+                                <CopyButton text={bullet} />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <Field label="Keywords (日本語・カンマ区切り)" value={ajp.keywords_jp} />
+                        <Field label="商品説明 / Description (日本語)" value={ajp.description_jp} />
+                      </Card>
+                      <RefinementBar
+                        onRefine={(type, custom) => handleRefine("amazon_jp", generatedData.amazon_jp, type, custom)}
+                        onUndo={() => handleUndoRefine("amazon_jp", previousContent["amazon_jp"])}
+                        hasPrevious={!!previousContent["amazon_jp"]}
+                        isLoading={!!refineLoading["amazon_jp"]}
+                        customText={customRefineText["amazon_jp"] || ""}
+                        onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, amazon_jp: v }))}
+                      />
+                      </>
+                    );
+                  })()}
+
+                  {/* Yahoo Auction */}
+                  {generatedData.yahoo_auction && (() => {
+                    const ya = generatedData.yahoo_auction!;
+                    const titleLen = ya.title ? ya.title.length : 0;
+                    const titleOver = titleLen > 65;
+                    return (
+                      <>
+                      <Card
+                        title="🔨 Yahoo Auction Japan (ヤフオク!)"
+                        copyText={[
+                          `Title: ${ya.title}`,
+                          `\nCondition: ${ya.condition}`,
+                          `\nCategory: ${ya.category}`,
+                          `\nStarting Price: ¥${ya.starting_price}`,
+                          `\nTags: ${ya.tags}`,
+                          `\n\nDescription:\n${ya.description}`,
+                        ].join("")}
+                      >
+                        <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
+                          🔨 Auction-style listing — optimised for ヤフオク!
+                        </div>
+
+                        {/* Title with strict 65-char counter */}
+                        <div style={{ marginBottom: 16 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                              オークションタイトル · STRICT max 65 chars
+                            </span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: titleOver ? "#FF3B30" : titleLen > 55 ? "#FF9500" : "#34C759",
+                                background: titleOver ? "#FFF2F0" : titleLen > 55 ? "#FFF8E6" : "#F0FFF4",
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                              }}>
+                                {titleLen}/65 {titleOver ? "⚠️ TOO LONG" : ""}
+                              </span>
+                              <CopyButton text={ya.title} />
+                            </div>
+                          </div>
+                          <div style={{
+                            background: titleOver ? "#FFF2F0" : "#F5F5F7",
+                            borderRadius: 10,
+                            padding: "10px 12px",
+                            fontSize: 14,
+                            color: "#1d1d1f",
+                            lineHeight: 1.6,
+                            border: titleOver ? "1px solid #FFCCC7" : "none",
+                          }}>
+                            {ya.title}
+                          </div>
+                        </div>
+
+                        {/* Condition toggle */}
+                        <div style={{ marginBottom: 16 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73", display: "block", marginBottom: 8 }}>
+                            商品の状態 (Condition)
+                          </span>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            {["新品", "中古"].map((cond) => (
+                              <div key={cond} style={{
+                                padding: "6px 16px",
+                                borderRadius: 20,
+                                fontSize: 13,
+                                fontWeight: 600,
+                                background: ya.condition === cond ? "#0071E3" : "#F5F5F7",
+                                color: ya.condition === cond ? "#FFFFFF" : "#6E6E73",
+                                border: `1px solid ${ya.condition === cond ? "#0071E3" : "#E5E5E7"}`,
+                              }}>
+                                {cond}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Category */}
+                        <Field label="カテゴリ (Category Path)" value={ya.category} />
+
+                        {/* Starting Price */}
+                        <div style={{ marginBottom: 16 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                              開始価格 (Starting Price)
+                            </span>
+                            <CopyButton text={ya.starting_price} />
+                          </div>
+                          <div style={{ background: "#F5F5F7", borderRadius: 10, padding: "10px 12px", fontSize: 16, fontWeight: 700, color: "#1d1d1f" }}>
+                            ¥{ya.starting_price ? Number(ya.starting_price).toLocaleString("ja-JP") : "—"}
+                          </div>
+                        </div>
+
+                        {/* Full Description */}
+                        <div style={{ marginBottom: 16 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                              商品説明 (Full Description · HTML)
+                            </span>
+                            <CopyButton text={ya.description} />
+                          </div>
+                          <textarea
+                            readOnly
+                            value={ya.description}
+                            rows={12}
+                            style={{
+                              width: "100%",
+                              background: "#F5F5F7",
+                              border: "none",
+                              borderRadius: 10,
+                              padding: "10px 12px",
+                              fontSize: 13,
+                              color: "#1d1d1f",
+                              lineHeight: 1.6,
+                              resize: "vertical",
+                              fontFamily: "monospace",
+                              outline: "none",
+                            }}
+                          />
+                        </div>
+
+                        {/* Tags */}
+                        <Field label="タグ (Tags)" value={ya.tags} />
+                      </Card>
+                      <RefinementBar
+                        onRefine={(type, custom) => handleRefine("yahoo_auction", generatedData.yahoo_auction, type, custom)}
+                        onUndo={() => handleUndoRefine("yahoo_auction", previousContent["yahoo_auction"])}
+                        hasPrevious={!!previousContent["yahoo_auction"]}
+                        isLoading={!!refineLoading["yahoo_auction"]}
+                        customText={customRefineText["yahoo_auction"] || ""}
+                        onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, yahoo_auction: v }))}
+                      />
+                      </>
+                    );
+                  })()}
 
                   {/* WooCommerce — Multi-Language */}
                   {(() => {

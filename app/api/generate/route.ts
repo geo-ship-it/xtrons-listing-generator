@@ -79,7 +79,7 @@ Generate optimised listings for this XTRONS product for marketplace platforms.
 ${productContext}
 
 Return ONLY a raw JSON object (no markdown, no code blocks, no explanation). Use this exact structure:
-{"amazon":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"ebay":{"titles":{"UK":["","",""],"US":["","",""],"AU":["","",""],"DE":["","",""]},"description":"","specifics":{"Brand":"XTRONS","Model":"","Compatibility":"","Screen Size":"","Connectivity":""}},"aliexpress":{"title":"","description":""},"yahoo_jp":{"title":"","description":""},"rakuten":{"title":"","description":""},"woocommerce":{"title":"","short_description":"","long_description":"","meta_title":"","meta_description":""}}
+{"amazon":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"ebay":{"titles":{"UK":["","",""],"US":["","",""],"AU":["","",""],"DE":["","",""]},"description_en":"","description_de":"","specifics":{"Brand":"XTRONS","Model":"","Compatibility":"","Screen Size":"","Connectivity":""}},"aliexpress":{"title":"","description":""},"yahoo_jp":{"title":"","description":""},"rakuten":{"title":"","description":""},"woocommerce":{"title":"","short_description":"","long_description":"","meta_title":"","meta_description":""}}
 
 Rules:
 - Amazon titles: generate an array of EXACTLY ${numVariations} title variation(s), each max 200 chars with different keyword emphasis, including car model, features, XTRONS brand
@@ -92,8 +92,15 @@ Rules:
 - Amazon bullets: exactly 5, each starting with ALL CAPS key benefit label
 - Keywords: comma-separated SEO terms
 - WooCommerce long_description: Use simple HTML only — <p> paragraphs and <ul><li> lists. No complex nested elements. Keep under 600 words.
-- All content in English (except yahoo_jp, rakuten, DE eBay titles)
-- yahoo_jp and rakuten: write title and description in Japanese (日本語) — use natural Japanese for Japanese automotive shoppers
+- LANGUAGE RULES (strictly enforce):
+  - Amazon UK, eBay UK/US/AU, AliExpress, WooCommerce: English
+  - eBay DE title AND description AND specifics: FULLY in German (Deutsch) — use natural German automotive language throughout
+  - Amazon DE (if added): FULLY in German
+  - yahoo_jp title AND description: FULLY in Japanese (日本語) — natural Japanese for Japanese car buyers
+  - rakuten title AND description: FULLY in Japanese (日本語)
+  - amazon_jp ALL fields (title_jp, bullets_jp, keywords_jp, description_jp): FULLY in Japanese (日本語)
+  - yahoo_auction ALL fields: FULLY in Japanese (日本語)
+- eBay DE description: Write a full product description in German. Use German automotive terminology. Include key specs, compatibility, and features in German.
 - Compatible cars in listings: always use "For [Brand]" format (e.g. "For BMW 3 Series F30 (320i 330i 340i) 2012-2019")
 - CRITICAL: amazon.titles MUST be an array of ${numVariations} string(s), ebay.titles.UK/US/AU/DE MUST each be an array of ${numVariations} string(s)
 - CRITICAL: Return ONLY the JSON object, nothing else`;
@@ -105,7 +112,7 @@ Generate optimised social and content listings for this XTRONS product.
 ${productContext}
 
 Return ONLY a raw JSON object (no markdown, no code blocks, no explanation). Use this exact structure:
-{"facebook":{"post":""},"youtube":{"title":"","description":"","tags":"","script_outline":""},"twitter":{"thread":["","",""]},"line":{"message":""},"reddit":{"title":"","body":""},"ai_recommendation":{"suggestions":["","",""],"blurb":""},"newsletter":{"subject":"","preview_text":"","hero_headline":"","intro":"","feature_highlights":[{"icon":"⚡","title":"","description":""},{"icon":"📱","title":"","description":""},{"icon":"🔊","title":"","description":""}],"compatible_vehicles":"","cta_text":"","signoff":"","plain_text":""}}
+{"facebook":{"post":""},"youtube":{"title":"","description":"","tags":"","script_outline":""},"twitter":{"thread":["","",""]},"line":{"message":""},"reddit":{"title":"","body":""},"ai_recommendation":{"suggestions":["","",""],"blurb":""},"newsletter":{"subject":"","preview_text":"","hero_headline":"","intro":"","feature_highlights":[{"icon":"⚡","title":"","description":""},{"icon":"📱","title":"","description":""},{"icon":"🔊","title":"","description":""}],"compatible_vehicles":"","cta_text":"","signoff":"","plain_text":""},"amazon_jp":{"title_jp":"","title_en":"","bullets_jp":["","","","",""],"keywords_jp":"","description_jp":""},"yahoo_auction":{"title":"","condition":"新品","category":"","starting_price":"","description":"","tags":""}}
 
 Rules:
 - Twitter thread: exactly 3 tweets max 280 chars each
@@ -120,6 +127,12 @@ Rules:
 - Newsletter preview_text: ~80 chars, the snippet shown in email clients
 - Newsletter plain_text: stripped plain text version of the full email body
 - Compatible cars in listings: always use "For [Brand]" format
+- amazon_jp: Write ENTIRELY in Japanese (日本語). title_jp max 150 Japanese chars. All bullets in Japanese. Use proper automotive Japanese terminology. Include 商品説明 section in description_jp. keywords_jp: Japanese search terms car buyers use on Amazon.co.jp. title_en: English title variant for Amazon JP.
+- yahoo_auction title: STRICT max 65 Japanese characters. Format: [状態][商品名][対応車種][特徴] e.g. "新品 XTRONS 9インチ Android14 BMW F30 F31用 カーナビ ワイヤレスCarPlay 4G"
+- yahoo_auction description: Full Japanese HTML description with clearly labelled sections: 商品説明, 商品仕様, 対応車種, 発送について (standard: ヤマト運輸またはゆうパックにて発送。落札後3営業日以内に発送いたします。), 注意事項
+- yahoo_auction category: Most specific Yahoo Auction category path for car stereos in Japanese (e.g. 自動車・オートバイ > カーナビ・カーエレクトロニクス > カーナビ本体)
+- yahoo_auction starting_price: Suggest reasonable starting price in JPY based on product — car stereos typically ¥15,000-¥80,000, return as string e.g. "29800"
+- yahoo_auction tags: 5-8 relevant Japanese hashtag-style tags (comma separated)
 - CRITICAL: Return ONLY the JSON object, nothing else`;
 
     // Build OpenAI-compatible content (DeepSeek uses OpenAI API format)
