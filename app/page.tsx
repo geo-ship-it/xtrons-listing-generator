@@ -99,7 +99,7 @@ interface GeneratedData {
   };
   aliexpress: { title: string; description: string };
   yahoo_jp: { title: string; description: string };
-  rakuten: { title: string; description: string };
+  rakuten: { title?: string; description?: string; product_name?: string; catch_copy?: string; description_html?: string; search_keywords?: string; item_number?: string };
   woocommerce: WooContent;
   facebook: { post: string };
   youtube: {
@@ -2076,14 +2076,23 @@ export default function Home() {
 
                   {/* Rakuten */}
                   <Card
-                    title="🏬 Rakuten"
-                    copyText={`Title: ${generatedData.rakuten.title}\n\nDescription:\n${generatedData.rakuten.description}`}
+                    title="🏬 楽天市場 (Rakuten Japan)"
+                    copyText={[
+                      `商品名: ${generatedData.rakuten.product_name || generatedData.rakuten.title || ""}`,
+                      `\nキャッチコピー: ${generatedData.rakuten.catch_copy || ""}`,
+                      `\n商品説明HTML: ${generatedData.rakuten.description_html || generatedData.rakuten.description || ""}`,
+                      `\n検索キーワード: ${generatedData.rakuten.search_keywords || ""}`,
+                      `\n商品管理番号: ${generatedData.rakuten.item_number || ""}`,
+                    ].join("")}
                   >
                     <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
-                      🇯🇵 Japanese content — optimised for Rakuten Japan
+                      🇯🇵 楽天市場バックエンド形式 — Rakuten Japan backend format
                     </div>
-                    <Field label="Title (日本語)" value={generatedData.rakuten.title} />
-                    <Field label="Description (日本語)" value={generatedData.rakuten.description} />
+                    <Field label="商品名 (Product Name)" value={generatedData.rakuten.product_name || generatedData.rakuten.title || ""} />
+                    <Field label="キャッチコピー (Catch Copy — HTML)" value={generatedData.rakuten.catch_copy || ""} />
+                    <Field label="商品説明 HTML (Description)" value={generatedData.rakuten.description_html || generatedData.rakuten.description || ""} />
+                    <Field label="検索キーワード (Search Keywords)" value={generatedData.rakuten.search_keywords || ""} />
+                    <Field label="商品管理番号 (Item Number)" value={generatedData.rakuten.item_number || ""} />
                   </Card>
 
 

@@ -100,7 +100,12 @@ Rules:
   - Amazon UK/US, eBay UK/US/AU, AliExpress, WooCommerce: English
   - eBay DE title AND description AND specifics: FULLY in German (Deutsch) — use natural German automotive language throughout
   - yahoo_jp title AND description: FULLY in Japanese (日本語) — natural Japanese for Japanese car buyers
-  - rakuten title AND description: FULLY in Japanese (日本語)
+  - rakuten: FULLY in Japanese (日本語). Match actual Rakuten backend fields:
+  - product_name: Full product title in Japanese with promotional prefix e.g. 【送料無料】XTRONS [product] [car model]対応 [key feature]. Max 127 chars.
+  - catch_copy: HTML-formatted tagline using <font color="#0000FF" size="+2"><strong>...</strong></font> tags. Eye-catching Japanese copy highlighting top 2-3 features.
+  - description_html: Full HTML product description in Japanese. Use <h2>, <p>, <ul><li> tags. Include: 製品特徴 (features), 対応車種 (compatible cars), 仕様 (specs), 注意事項 (notes). 
+  - search_keywords: Space-separated Japanese search keywords for Rakuten search (e.g. カーナビ Android BMW フリップダウン)
+  - item_number: Suggest item management number based on SKU (e.g. xtrons-[SKU]-jp)
   - yahoo_auction ALL fields: FULLY in Japanese (日本語)
 - eBay DE description: Write a full product description in German. Use German automotive terminology. Include key specs, compatibility, and features in German.
 - Compatible cars in listings: always use "For [Brand]" format (e.g. "For BMW 3 Series F30 (320i 330i 340i) 2012-2019")
