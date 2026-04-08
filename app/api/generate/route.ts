@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const client = new OpenAI({
   baseURL: "https://api.deepseek.com",
-  apiKey: process.env.DEEPSEEK_API_KEY || "sk-9011d468ebed4d28be7eeda8b1232ba1",
+  apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
 interface ImageInput {
@@ -39,6 +39,21 @@ function parseJsonSafe(text: string): unknown {
   }
 }
 
+// Role configuration
+const ROLE_MODULES: Record<string, string[]> = {
+  Geo: ["amazon", "ebay", "aliexpress", "alibaba", "yahoo_jp", "rakuten", "woocommerce", "facebook", "youtube", "twitter", "line", "reddit", "ai_recommendation", "newsletter", "yahoo_auction"],
+  Japan: ["amazon_jp", "rakuten", "yahoo_jp", "yahoo_auction", "line", "facebook_jp", "twitter_jp", "ai_recommendation"],
+  Ebay: ["ebay", "ai_recommendation"],
+  Amazon: ["amazon", "ai_recommendation"],
+  SEO: ["woocommerce", "facebook", "youtube", "twitter", "line", "reddit", "ai_recommendation"],
+  Trading: ["facebook_b2b", "alibaba", "ai_recommendation", "newsletter"],
+};
+
+function isModuleAllowed(role: string | undefined, module: string): boolean {
+  if (!role || !ROLE_MODULES[role]) return false;
+  return ROLE_MODULES[role].includes(module);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -53,13 +68,14 @@ export async function POST(request: NextRequest) {
       shortDescription,
       sellingPoints,
       language = "EN",
-      images = [] as ImageInput[],
+      imageFeatures = null as string | null,
       newsletterTone = "friendly",
-      titleVariations = 3,
+      titleVariations = 1,
+      userRole = "Geo",
     } = body;
 
-    const hasImages = images && images.length > 0;
-    const numVariations = Math.min(Math.max(Number(titleVariations) || 3, 1), 10);
+    const hasImageFeatures = imageFeatures && imageFeatures.trim().length > 0;
+    const numVariations = Math.min(Math.max(Number(titleVariations) || 1, 1), 10);
 
     const productContext = `Product: ${productName}
 SKU: ${sku}
@@ -70,7 +86,7 @@ ${screenSize ? `Screen Size: ${screenSize}` : ""}
 ${ramRom ? `RAM/ROM: ${ramRom}` : ""}
 Description: ${shortDescription}
 Selling Points: ${sellingPoints}
-${hasImages ? "\nProduct images provided — analyse them to extract visible features, text, design details." : ""}`;
+${hasImageFeatures ? `\nImage Analysis:\n${imageFeatures}` : ""}`;
 
     // ── Prompt 1: Marketplace data ──────────────────────────────────────────────
     const prompt1 = `You are an expert e-commerce copywriter and SEO specialist for automotive electronics.
@@ -79,7 +95,7 @@ Generate optimised listings for this XTRONS product for marketplace platforms.
 ${productContext}
 
 Return ONLY a raw JSON object (no markdown, no code blocks, no explanation). Use this exact structure:
-{"amazon":{"UK":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"US":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"DE":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"JP":{"title_jp":"","title_en":"","bullets_jp":["","","","",""],"keywords_jp":"","description_jp":""}},"ebay":{"titles":{"UK":["","",""],"US":["","",""],"AU":["","",""],"DE":["","",""]},"description_en":"","description_de":"","specifics":{"Brand":"XTRONS","Model":"","Compatibility":"","Screen Size":"","Connectivity":""}},"aliexpress":{"title":"","description":""},"yahoo_jp":{"title":"","description":""},"rakuten":{"title":"","description":""},"woocommerce":{"title":"","short_description":"","long_description":"","meta_title":"","meta_description":""}}
+{"amazon":{"UK":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"US":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"DE":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"JP":{"title_jp":"","title_en":"","bullets_jp":["","","","",""],"keywords_jp":"","description_jp":""}},"ebay":{"titles":{"UK":["","",""],"US":["","",""],"AU":["","",""],"DE":["","",""]},"description_en":"","description_de":"","specifics":{"Brand":"XTRONS","Model":"","Compatibility":"","Screen Size":"","Connectivity":""}},"aliexpress":{"title":"","description":""},"alibaba":{"product_title":"","headline":"","keywords":"","description_html":"","spec_summary":"","moq":"","lead_time":"","price_note":"","oem_odm":"","packaging_shipping":""},"yahoo_jp":{"product_name":"","catch_copy":"","description_html":"","search_keywords":"","product_code":"","spec_summary":""},"rakuten":{"product_name":"","catch_copy":"","description_html":"","search_keywords":"","item_number":""},"woocommerce":{"title":"","short_description":"","long_description":"","meta_title":"","meta_description":""}}
 
 Rules:
 - Amazon UK: English. Title max 200 chars. 5 bullets starting with ALL CAPS benefit. British automotive language.
@@ -95,11 +111,28 @@ Rules:
   - ALL eBay titles across all markets: MUST be between 75-80 characters, maximize SEO keywords, count every character
 - Amazon bullets: exactly 5, each starting with ALL CAPS key benefit label
 - Keywords: comma-separated SEO terms
+- alibaba: English, B2B wholesale tone. Generate backend fill-ready fields:
+  - product_title: clear wholesale product title for Alibaba search
+  - headline: short B2B selling hook
+  - keywords: comma-separated core search terms
+  - description_html: simple HTML for Alibaba product description
+  - spec_summary: concise specs/fitment summary
+  - moq: sensible MOQ suggestion string
+  - lead_time: estimated lead time string
+  - price_note: placeholder pricing / FOB note in B2B style
+  - oem_odm: OEM/ODM support note
+  - packaging_shipping: packaging and shipping note for buyers
 - WooCommerce long_description: Use simple HTML only — <p> paragraphs and <ul><li> lists. No complex nested elements. Keep under 600 words.
 - LANGUAGE RULES (strictly enforce):
   - Amazon UK/US, eBay UK/US/AU, AliExpress, WooCommerce: English
   - eBay DE title AND description AND specifics: FULLY in German (Deutsch) — use natural German automotive language throughout
-  - yahoo_jp title AND description: FULLY in Japanese (日本語) — natural Japanese for Japanese car buyers
+  - yahoo_jp: FULLY in Japanese (日本語). Match Yahoo!ショッピング backend-style fields:
+  - product_name: Japanese product title for Yahoo Shopping search, strong SEO, natural JP phrasing
+  - catch_copy: Short Japanese catch phrase / promo hook suitable for Yahoo Shopping
+  - description_html: Full Japanese HTML description with sections 商品説明, 商品仕様, 対応車種, 注意事項
+  - search_keywords: Space-separated Japanese search keywords for Yahoo Shopping
+  - product_code: Seller product code based on SKU (e.g. xtrons-[SKU]-yahoo)
+  - spec_summary: Concise Japanese spec summary for quick reference
   - rakuten: FULLY in Japanese (日本語). Match actual Rakuten backend fields:
   - product_name: Full product title in Japanese with promotional prefix e.g. 【送料無料】XTRONS [product] [car model]対応 [key feature]. Max 127 chars.
   - catch_copy: HTML-formatted tagline using <font color="#0000FF" size="+2"><strong>...</strong></font> tags. Eye-catching Japanese copy highlighting top 2-3 features.
@@ -119,11 +152,15 @@ Generate optimised social and content listings for this XTRONS product.
 ${productContext}
 
 Return ONLY a raw JSON object (no markdown, no code blocks, no explanation). Use this exact structure:
-{"facebook":{"post":""},"youtube":{"title":"","description":"","tags":"","script_outline":""},"twitter":{"thread":["","",""]},"line":{"message":""},"reddit":{"title":"","body":""},"ai_recommendation":{"suggestions":["","",""],"blurb":""},"newsletter":{"subject":"","preview_text":"","hero_headline":"","intro":"","feature_highlights":[{"icon":"⚡","title":"","description":""},{"icon":"📱","title":"","description":""},{"icon":"🔊","title":"","description":""}],"compatible_vehicles":"","cta_text":"","signoff":"","plain_text":""},"yahoo_auction":{"title":"","condition":"新品","category":"","starting_price":"","description":"","tags":""}}
+{"facebook":{"EN":{"post":""},"DE":{"post":""},"JP":{"post":""},"B2B":{"post":""}},"youtube":{"title":"","description":"","tags":"","script_outline":""},"twitter":{"EN":{"thread":["","",""]},"JP":{"thread":["","",""]}},"line":{"message":""},"reddit":{"title":"","body":""},"ai_recommendation":{"suggestions":["","",""],"blurb":""},"newsletter":{"subject":"","preview_text":"","hero_headline":"","intro":"","feature_highlights":[{"icon":"⚡","title":"","description":""},{"icon":"📱","title":"","description":""},{"icon":"🔊","title":"","description":""}],"compatible_vehicles":"","cta_text":"","signoff":"","plain_text":""},"yahoo_auction":{"title":"","condition":"新品","category":"","starting_price":"","buy_now_price":"","description":"","tags":"","shipping_note":"","payment_note":""}}
 
 Rules:
-- Twitter thread: exactly 3 tweets max 280 chars each
-- Facebook post: engaging with emojis and CTA
+- Facebook EN: engaging English post with emojis and CTA
+- Facebook DE: fully German Facebook post, natural German social tone
+- Facebook JP: fully Japanese Facebook post, natural Japanese social tone
+- Facebook B2B: English B2B/distributor-focused post for dealers, resellers, wholesalers, and trade buyers. More professional, less retail, highlight MOQ/OEM/distribution value when relevant
+- Twitter EN thread: exactly 3 tweets max 280 chars each in English
+- Twitter JP thread: exactly 3 tweets max 280 chars each in Japanese, natural X tone
 - AI recommendations: 2-3 complementary XTRONS accessories based on category
 - Newsletter tone: ${newsletterTone} — write the entire newsletter in this tone
   - friendly: warm, conversational, personal, like writing to a friend who loves cars
@@ -138,24 +175,16 @@ Rules:
 - yahoo_auction description: Full Japanese HTML description with clearly labelled sections: 商品説明, 商品仕様, 対応車種, 発送について (standard: ヤマト運輸またはゆうパックにて発送。落札後3営業日以内に発送いたします。), 注意事項
 - yahoo_auction category: Most specific Yahoo Auction category path for car stereos in Japanese (e.g. 自動車・オートバイ > カーナビ・カーエレクトロニクス > カーナビ本体)
 - yahoo_auction starting_price: Suggest reasonable starting price in JPY based on product — car stereos typically ¥15,000-¥80,000, return as string e.g. "29800"
+- yahoo_auction buy_now_price: Optional 即決価格 in JPY, typically 10-20% above starting price, return as string e.g. "34800"
+- yahoo_auction shipping_note: Japanese shipping note suitable for ヤフオク! seller listing
+- yahoo_auction payment_note: Japanese payment / transaction note suitable for ヤフオク! seller listing
 - yahoo_auction tags: 5-8 relevant Japanese hashtag-style tags (comma separated)
 - CRITICAL: Return ONLY the JSON object, nothing else`;
 
-    // Build OpenAI-compatible content (DeepSeek uses OpenAI API format)
-    type OAIContent = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
-
-    const content1: OAIContent[] = [];
-    if (hasImages) {
-      for (const img of images as ImageInput[]) {
-        content1.push({
-          type: "image_url",
-          image_url: { url: `data:${img.mediaType};base64,${img.base64}` }
-        });
-      }
-    }
-    content1.push({ type: "text", text: prompt1 });
-
-    const content2: OAIContent[] = [{ type: "text", text: prompt2 }];
+    // Build DeepSeek-compatible content (text only, no image_url support)
+    // Images have already been analyzed by GPT-4o-mini and summary is in imageFeatures
+    const content1 = prompt1;
+    const content2 = prompt2;
 
     const MODEL = "deepseek-chat";
     const MAX_TOKENS = 8192;
@@ -205,6 +234,17 @@ Rules:
         }
         amazon.UK = { titles: amazon.titles, bullets: amazon.bullets, keywords: amazon.keywords, description: amazon.description };
       }
+    }
+
+    // Normalize social content backwards compatibility
+    const facebook = parsed?.facebook as Record<string, unknown> | undefined;
+    if (facebook && typeof facebook.post === "string" && !facebook.EN) {
+      facebook.EN = { post: facebook.post };
+    }
+
+    const twitter = parsed?.twitter as Record<string, unknown> | undefined;
+    if (twitter && Array.isArray(twitter.thread) && !twitter.EN) {
+      twitter.EN = { thread: twitter.thread };
     }
 
     // Normalize eBay titles

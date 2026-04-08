@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { ROLE_CONFIG, RoleName, isModuleAllowed, getVisibleTabs } from "./lib/roleConfig";
 
 // ─── WooCommerce Language Config ──────────────────────────────────────────────
 const WOO_LANGUAGES = [
@@ -84,6 +86,19 @@ interface AmazonData {
   description?: string;
 }
 
+interface AlibabaData {
+  product_title: string;
+  headline: string;
+  keywords: string;
+  description_html: string;
+  spec_summary: string;
+  moq: string;
+  lead_time: string;
+  price_note: string;
+  oem_odm: string;
+  packaging_shipping: string;
+}
+
 interface GeneratedData {
   amazon: AmazonData;
   ebay: {
@@ -98,17 +113,37 @@ interface GeneratedData {
     specifics: Record<string, string>;
   };
   aliexpress: { title: string; description: string };
-  yahoo_jp: { title: string; description: string };
+  alibaba?: AlibabaData;
+  yahoo_jp: {
+    title?: string;
+    description?: string;
+    product_name?: string;
+    catch_copy?: string;
+    description_html?: string;
+    search_keywords?: string;
+    product_code?: string;
+    spec_summary?: string;
+  };
   rakuten: { title?: string; description?: string; product_name?: string; catch_copy?: string; description_html?: string; search_keywords?: string; item_number?: string };
   woocommerce: WooContent;
-  facebook: { post: string };
+  facebook: {
+    post?: string;
+    EN?: { post: string };
+    DE?: { post: string };
+    JP?: { post: string };
+    B2B?: { post: string };
+  };
   youtube: {
     title: string;
     description: string;
     tags: string;
     script_outline: string;
   };
-  twitter: { thread: string[] };
+  twitter: {
+    thread: string[];
+    EN?: { thread: string[] };
+    JP?: { thread: string[] };
+  };
   line: { message: string };
   reddit: { title: string; body: string };
   ai_recommendation: { suggestions: string[]; blurb: string };
@@ -118,8 +153,11 @@ interface GeneratedData {
     condition: string;
     category: string;
     starting_price: string;
+    buy_now_price?: string;
     description: string;
     tags: string;
+    shipping_note?: string;
+    payment_note?: string;
   };
 }
 
@@ -726,12 +764,18 @@ export default function Home() {
   const [generatedData, setGeneratedData] = useState<GeneratedData | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("Marketplaces");
   const [language] = useState("EN");
-  const [titleVariations, setTitleVariations] = useState(3);
+  const [titleVariations, setTitleVariations] = useState(1);
+  const router = useRouter();
+  const [userRole, setUserRole] = useState<RoleName | null>(null);
+  const [imageFeatures, setImageFeatures] = useState<string | null>(null);
+  const [analyzingImages, setAnalyzingImages] = useState(false);
   const [activeEbayMarket, setActiveEbayMarket] = useState<"UK" | "US" | "AU" | "DE">("UK");
   const [activeAmazonMarket, setActiveAmazonMarket] = useState<"UK" | "US" | "DE" | "JP">("UK");
   const [newsletterTone, setNewsletterTone] = useState<NewsletterTone>("friendly");
   const [newsletterLoading, setNewsletterLoading] = useState(false);
   const [newsletterToneChanged, setNewsletterToneChanged] = useState(false);
+  const [activeFacebookLang, setActiveFacebookLang] = useState<"EN" | "DE" | "JP" | "B2B">("EN");
+  const [activeTwitterLang, setActiveTwitterLang] = useState<"EN" | "JP">("EN");
 
   // WooCommerce multi-language state
   const [wooTranslations, setWooTranslations] = useState<Record<string, WooContent>>({});
@@ -755,9 +799,224 @@ export default function Home() {
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const wooImportInputRef = useRef<HTMLInputElement>(null);
 
   // Combined images (URL-extracted + uploaded)
   const allImages = [...urlImages, ...uploadedImages];
+
+  // Auth check on mount
+  useEffect(() => {
+    const role = localStorage.getItem("userRole") as RoleName | null;
+    if (!role || !(role in ROLE_CONFIG)) {
+      router.push("/login");
+      return;
+    }
+    setUserRole(role);
+  }, [router]);
+
+  // Analyze images once when they change
+  useEffect(() => {
+    const analyzeImages = async () => {
+      if (allImages.length === 0) {
+        setImageFeatures(null);
+        return;
+      }
+
+      setAnalyzingImages(true);
+      try {
+        const res = await fetch("/api/analyze-images", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            images: allImages.map((img) => ({
+              base64: img.base64,
+              mediaType: img.mediaType,
+            })),
+          }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          setImageFeatures(json.summary);
+        }
+      } catch (err) {
+        console.error("Image analysis failed:", err);
+      } finally {
+        setAnalyzingImages(false);
+      }
+    };
+
+    analyzeImages();
+  }, [allImages.length]); // Only re-run when count changes
+
+  const parseCsvRow = (line: string) => {
+    const result: string[] = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const next = line[i + 1];
+      if (char === '"') {
+        if (inQuotes && next === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current);
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    result.push(current);
+    return result.map((v) => v.trim());
+  };
+
+  const exportWooFormat = (content: WooContent, langCode: string) => {
+    const text = [
+      `WooCommerce Export (${langCode})`,
+      "",
+      `Product Title: ${content.title}`,
+      "",
+      "Short Description:",
+      content.short_description,
+      "",
+      "Long Description (HTML):",
+      content.long_description,
+      "",
+      `SEO Meta Title: ${content.meta_title}`,
+      "",
+      `SEO Meta Description: ${content.meta_description}`,
+      "",
+    ].join("\n");
+
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `woocommerce-${langCode.toLowerCase()}-${(formData.sku || formData.productName || "listing").toLowerCase().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "")}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportWooCsv = (content: WooContent, langCode: string) => {
+    const headers = [
+      "Name",
+      "SKU",
+      "Short description",
+      "Description",
+      "Slug",
+      "Categories",
+      "Tags",
+      "Regular price",
+      "Meta: title",
+      "Meta: description",
+      "Language",
+    ];
+
+    const escapeCsv = (value: string) => `"${String(value || "").replace(/"/g, '""')}"`;
+    const row = [
+      content.title,
+      formData.sku || "",
+      content.short_description,
+      content.long_description,
+      formData.productName.toLowerCase().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, ""),
+      formData.category || "",
+      formData.compatibleCars || "",
+      formData.price || "",
+      content.meta_title,
+      content.meta_description,
+      langCode,
+    ];
+
+    const csv = `${headers.join(",")}\n${row.map(escapeCsv).join(",")}\n`;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `woocommerce-${langCode.toLowerCase()}-${(formData.sku || formData.productName || "listing").toLowerCase().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "")}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportWooCsv = async (file: File) => {
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    if (lines.length < 2) throw new Error("CSV must include headers and at least one data row");
+
+    const headers = parseCsvRow(lines[0]).map((h) => h.toLowerCase());
+    const values = parseCsvRow(lines[1]);
+    const get = (...keys: string[]) => {
+      for (const key of keys) {
+        const idx = headers.indexOf(key.toLowerCase());
+        if (idx >= 0) return values[idx] || "";
+      }
+      return "";
+    };
+
+    setFormData((prev) => ({
+      ...prev,
+      productName: get("name", "title") || prev.productName,
+      sku: get("sku") || prev.sku,
+      category: get("categories") || prev.category,
+      price: get("regular price", "price") || prev.price,
+      shortDescription: get("short description", "excerpt") || prev.shortDescription,
+      compatibleCars: get("tags") || prev.compatibleCars,
+    }));
+
+    setGeneratedData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        woocommerce: {
+          title: get("name", "title") || prev.woocommerce.title,
+          short_description: get("short description", "excerpt") || prev.woocommerce.short_description,
+          long_description: get("description", "long description") || prev.woocommerce.long_description,
+          meta_title: get("meta: title", "meta title") || prev.woocommerce.meta_title,
+          meta_description: get("meta: description", "meta description") || prev.woocommerce.meta_description,
+        },
+      };
+    });
+  };
+
+  const exportAlibabaFormat = (content: AlibabaData) => {
+    const text = [
+      "Alibaba Export",
+      "",
+      `Product Title: ${content.product_title}`,
+      "",
+      `Headline: ${content.headline}`,
+      "",
+      `Core Keywords: ${content.keywords}`,
+      "",
+      "Description (HTML):",
+      content.description_html,
+      "",
+      `Spec Summary: ${content.spec_summary}`,
+      `MOQ: ${content.moq}`,
+      `Lead Time: ${content.lead_time}`,
+      `Price / FOB Note: ${content.price_note}`,
+      `OEM / ODM: ${content.oem_odm}`,
+      `Packaging / Shipping: ${content.packaging_shipping}`,
+      "",
+    ].join("\n");
+
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `alibaba-${(formData.sku || formData.productName || "listing").toLowerCase().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "")}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const handleImportUrl = async () => {
     if (!importUrl.trim()) return;
@@ -961,23 +1220,23 @@ export default function Home() {
       setError("Product name is required.");
       return;
     }
+    if (!userRole) {
+      setError("User role not set. Please log in again.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const imagesPayload = allImages.map((img) => ({
-        base64: img.base64,
-        mediaType: img.mediaType,
-      }));
-
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
           language,
-          images: imagesPayload,
+          imageFeatures,
           newsletterTone,
           titleVariations,
+          userRole,
         }),
       });
       const json = await res.json();
@@ -1156,20 +1415,44 @@ export default function Home() {
                   marginLeft: 8,
                 }}
               >
-                Powered by Claude AI
+                Powered by DeepSeek AI
               </span>
             </div>
           </div>
-          <div
-            style={{
-              fontSize: 12,
-              color: "#AEAEB2",
-              background: "#F5F5F7",
-              padding: "4px 10px",
-              borderRadius: 6,
-            }}
-          >
-            All platforms · One click
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {userRole && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "#0071E3",
+                  background: "#EAF3FF",
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  fontWeight: 600,
+                }}
+              >
+                {userRole}
+              </div>
+            )}
+            <button
+              onClick={() => {
+                localStorage.removeItem("userRole");
+                localStorage.removeItem("allowedModules");
+                router.push("/login");
+              }}
+              style={{
+                fontSize: 12,
+                color: "#FF3B30",
+                background: "transparent",
+                border: "1px solid #FF3B30",
+                padding: "4px 10px",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              Logout
+            </button>
           </div>
         </div>
       </header>
@@ -1369,9 +1652,23 @@ export default function Home() {
               )}
 
               {/* Status */}
-              {allImages.length > 0 && (
+              {analyzingImages && (
+                <div style={{ marginTop: 10, fontSize: 11, color: "#0071E3", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
+                  <svg className="animate-spin" width={11} height={11} fill="none" viewBox="0 0 24 24">
+                    <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Analyzing images...
+                </div>
+              )}
+              {!analyzingImages && imageFeatures && (
                 <div style={{ marginTop: 10, fontSize: 11, color: "#34C759", fontWeight: 500 }}>
-                  ✓ {allImages.length} image{allImages.length > 1 ? "s" : ""} included in generation
+                  ✓ {allImages.length} image{allImages.length > 1 ? "s" : ""} analyzed — features extracted
+                </div>
+              )}
+              {!analyzingImages && allImages.length > 0 && !imageFeatures && (
+                <div style={{ marginTop: 10, fontSize: 11, color: "#34C759", fontWeight: 500 }}>
+                  ✓ {allImages.length} image{allImages.length > 1 ? "s" : ""} ready
                 </div>
               )}
               {allImages.length === 0 && (
@@ -1674,7 +1971,13 @@ export default function Home() {
             </div>
           )}
 
-          {generatedData && !loading && (
+          {generatedData && !loading && (() => {
+            const visibleTabs = getVisibleTabs(userRole);
+            // Set active tab to first visible if current is not visible
+            if (visibleTabs.length > 0 && !visibleTabs.includes(activeTab)) {
+              setActiveTab(visibleTabs[0] as Tab);
+            }
+            return (
             <div className="fade-in">
               {/* ── Tab Bar ── */}
               <div
@@ -1691,10 +1994,10 @@ export default function Home() {
                   borderBottomRightRadius: 0,
                 }}
               >
-                {TABS.map((tab) => (
+                {visibleTabs.map((tab) => (
                   <button
                     key={tab}
-                    onClick={() => setActiveTab(tab)}
+                    onClick={() => setActiveTab(tab as Tab)}
                     style={{
                       flex: 1,
                       padding: "13px 12px",
@@ -2062,17 +2365,88 @@ export default function Home() {
                     <Field label="Description" value={generatedData.aliexpress.description} />
                   </Card>
 
+                  {/* Alibaba */}
+                  {generatedData.alibaba && (
+                    <Card
+                      title="🏭 Alibaba"
+                      copyText={[
+                        `Product Title: ${generatedData.alibaba.product_title}`,
+                        `\nHeadline: ${generatedData.alibaba.headline}`,
+                        `\nCore Keywords: ${generatedData.alibaba.keywords}`,
+                        `\n\nDescription (HTML):\n${generatedData.alibaba.description_html}`,
+                        `\nSpec Summary: ${generatedData.alibaba.spec_summary}`,
+                        `\nMOQ: ${generatedData.alibaba.moq}`,
+                        `\nLead Time: ${generatedData.alibaba.lead_time}`,
+                        `\nPrice / FOB Note: ${generatedData.alibaba.price_note}`,
+                        `\nOEM / ODM: ${generatedData.alibaba.oem_odm}`,
+                        `\nPackaging / Shipping: ${generatedData.alibaba.packaging_shipping}`,
+                      ].join("")}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                        <div style={{ padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
+                          🏭 Alibaba B2B fill format — wholesale/distributor ready
+                        </div>
+                        <button
+                          onClick={() => exportAlibabaFormat(generatedData.alibaba!)}
+                          style={{
+                            height: 30,
+                            padding: "0 12px",
+                            background: "#FF6A00",
+                            color: "#FFFFFF",
+                            border: "none",
+                            borderRadius: 8,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                          }}
+                        >
+                          Export
+                        </button>
+                      </div>
+                      <Field label="Product Title" value={generatedData.alibaba.product_title} />
+                      <Field label="Headline / Selling Hook" value={generatedData.alibaba.headline} />
+                      <Field label="Core Keywords" value={generatedData.alibaba.keywords} />
+                      <Field label="Description (HTML)" value={generatedData.alibaba.description_html} />
+                      <Field label="Spec Summary" value={generatedData.alibaba.spec_summary} />
+                      <Field label="MOQ" value={generatedData.alibaba.moq} />
+                      <Field label="Lead Time" value={generatedData.alibaba.lead_time} />
+                      <Field label="Price / FOB Note" value={generatedData.alibaba.price_note} />
+                      <Field label="OEM / ODM Support" value={generatedData.alibaba.oem_odm} />
+                      <Field label="Packaging / Shipping" value={generatedData.alibaba.packaging_shipping} />
+                    </Card>
+                  )}
+
                   {/* Yahoo Japan */}
                   <Card
-                    title="🇯🇵 Yahoo Japan"
-                    copyText={`Title: ${generatedData.yahoo_jp.title}\n\nDescription:\n${generatedData.yahoo_jp.description}`}
+                    title="🛍️ Yahoo!ショッピング"
+                    copyText={[
+                      `商品名: ${generatedData.yahoo_jp.product_name || generatedData.yahoo_jp.title || ""}`,
+                      `\nキャッチコピー: ${generatedData.yahoo_jp.catch_copy || ""}`,
+                      `\n商品コード: ${generatedData.yahoo_jp.product_code || ""}`,
+                      `\n検索キーワード: ${generatedData.yahoo_jp.search_keywords || ""}`,
+                      `\n商品情報要約: ${generatedData.yahoo_jp.spec_summary || ""}`,
+                      `\n\n商品説明HTML:\n${generatedData.yahoo_jp.description_html || generatedData.yahoo_jp.description || ""}`,
+                    ].join("")}
                   >
                     <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
-                      🇯🇵 Japanese content — optimised for Yahoo Japan
+                      🇯🇵 Yahoo!ショッピング backend-style format — copy/paste ready for Japan marketplace listings
                     </div>
-                    <Field label="Title (日本語)" value={generatedData.yahoo_jp.title} />
-                    <Field label="Description (日本語)" value={generatedData.yahoo_jp.description} />
+                    <Field label="商品名 (Product Name)" value={generatedData.yahoo_jp.product_name || generatedData.yahoo_jp.title || ""} />
+                    <Field label="キャッチコピー (Catch Copy)" value={generatedData.yahoo_jp.catch_copy || ""} />
+                    <Field label="商品コード (Product Code)" value={generatedData.yahoo_jp.product_code || ""} />
+                    <Field label="検索キーワード (Search Keywords)" value={generatedData.yahoo_jp.search_keywords || ""} />
+                    <Field label="商品情報要約 (Spec Summary)" value={generatedData.yahoo_jp.spec_summary || ""} />
+                    <Field label="商品説明 HTML (Description)" value={generatedData.yahoo_jp.description_html || generatedData.yahoo_jp.description || ""} />
                   </Card>
+                  <RefinementBar
+                    onRefine={(type, custom) => handleRefine("yahoo_jp", generatedData.yahoo_jp, type, custom)}
+                    onUndo={() => handleUndoRefine("yahoo_jp", previousContent["yahoo_jp"])}
+                    hasPrevious={!!previousContent["yahoo_jp"]}
+                    isLoading={!!refineLoading["yahoo_jp"]}
+                    customText={customRefineText["yahoo_jp"] || ""}
+                    onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, yahoo_jp: v }))}
+                  />
 
                   {/* Rakuten */}
                   <Card
@@ -2111,6 +2485,9 @@ export default function Home() {
                           `\nCondition: ${ya.condition}`,
                           `\nCategory: ${ya.category}`,
                           `\nStarting Price: ¥${ya.starting_price}`,
+                          `\nBuy Now Price: ¥${ya.buy_now_price || ""}`,
+                          `\nShipping Note: ${ya.shipping_note || ""}`,
+                          `\nPayment Note: ${ya.payment_note || ""}`,
                           `\nTags: ${ya.tags}`,
                           `\n\nDescription:\n${ya.description}`,
                         ].join("")}
@@ -2177,18 +2554,34 @@ export default function Home() {
                         {/* Category */}
                         <Field label="カテゴリ (Category Path)" value={ya.category} />
 
-                        {/* Starting Price */}
-                        <div style={{ marginBottom: 16 }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
-                              開始価格 (Starting Price)
-                            </span>
-                            <CopyButton text={ya.starting_price} />
+                        {/* Pricing */}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                                開始価格 (Starting Price)
+                              </span>
+                              <CopyButton text={ya.starting_price} />
+                            </div>
+                            <div style={{ background: "#F5F5F7", borderRadius: 10, padding: "10px 12px", fontSize: 16, fontWeight: 700, color: "#1d1d1f" }}>
+                              ¥{ya.starting_price ? Number(ya.starting_price).toLocaleString("ja-JP") : "—"}
+                            </div>
                           </div>
-                          <div style={{ background: "#F5F5F7", borderRadius: 10, padding: "10px 12px", fontSize: 16, fontWeight: 700, color: "#1d1d1f" }}>
-                            ¥{ya.starting_price ? Number(ya.starting_price).toLocaleString("ja-JP") : "—"}
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                                即決価格 (Buy Now)
+                              </span>
+                              <CopyButton text={ya.buy_now_price || ""} />
+                            </div>
+                            <div style={{ background: "#F5F5F7", borderRadius: 10, padding: "10px 12px", fontSize: 16, fontWeight: 700, color: "#1d1d1f" }}>
+                              {ya.buy_now_price ? `¥${Number(ya.buy_now_price).toLocaleString("ja-JP")}` : "—"}
+                            </div>
                           </div>
                         </div>
+
+                        <Field label="発送について (Shipping Note)" value={ya.shipping_note || ""} />
+                        <Field label="支払いについて (Payment Note)" value={ya.payment_note || ""} />
 
                         {/* Full Description */}
                         <div style={{ marginBottom: 16 }}>
@@ -2273,7 +2666,81 @@ export default function Home() {
                           }}
                         >
                           <span style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f" }}>🛍️ WooCommerce</span>
-                          {copyText && <CopyButton text={copyText} label="Copy all" className="!opacity-100" />}
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <input
+                              ref={wooImportInputRef}
+                              type="file"
+                              accept=".csv,text/csv"
+                              style={{ display: "none" }}
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                try {
+                                  await handleImportWooCsv(file);
+                                } catch (err) {
+                                  setError(err instanceof Error ? err.message : "WooCommerce CSV import failed");
+                                } finally {
+                                  e.target.value = "";
+                                }
+                              }}
+                            />
+                            <button
+                              onClick={() => wooImportInputRef.current?.click()}
+                              style={{
+                                height: 30,
+                                padding: "0 12px",
+                                background: "#FFFFFF",
+                                color: "#0071E3",
+                                border: "1px solid #0071E3",
+                                borderRadius: 8,
+                                fontSize: 12,
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                fontFamily: "inherit",
+                              }}
+                            >
+                              Import CSV
+                            </button>
+                            {activeContent && (
+                              <>
+                                <button
+                                  onClick={() => exportWooCsv(activeContent, activeWooLang)}
+                                  style={{
+                                    height: 30,
+                                    padding: "0 12px",
+                                    background: "#FF9500",
+                                    color: "#FFFFFF",
+                                    border: "none",
+                                    borderRadius: 8,
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                    fontFamily: "inherit",
+                                  }}
+                                >
+                                  Export CSV
+                                </button>
+                                <button
+                                  onClick={() => exportWooFormat(activeContent, activeWooLang)}
+                                  style={{
+                                    height: 30,
+                                    padding: "0 12px",
+                                    background: "#34C759",
+                                    color: "#FFFFFF",
+                                    border: "none",
+                                    borderRadius: 8,
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                    fontFamily: "inherit",
+                                  }}
+                                >
+                                  Export TXT
+                                </button>
+                              </>
+                            )}
+                            {copyText && <CopyButton text={copyText} label="Copy all" className="!opacity-100" />}
+                          </div>
                         </div>
 
                         {/* Language tabs */}
@@ -2326,9 +2793,12 @@ export default function Home() {
                         <div style={{ padding: 16 }}>
                           {activeContent ? (
                             <>
-                              <Field label="Product Title" value={activeContent.title} />
-                              <Field label="Short Description" value={activeContent.short_description} />
-                              <Field label="Long Description (HTML)" value={activeContent.long_description} />
+                              <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
+                                🧩 WooCommerce fill format — structured for quick copy/paste into product fields
+                              </div>
+                              <Field label="Product Title / Name" value={activeContent.title} />
+                              <Field label="Short Description / Excerpt" value={activeContent.short_description} />
+                              <Field label="Long Description / Product Description (HTML)" value={activeContent.long_description} />
                               <Field label="SEO Meta Title" value={activeContent.meta_title} />
                               <Field label="SEO Meta Description" value={activeContent.meta_description} />
                             </>
@@ -2391,9 +2861,54 @@ export default function Home() {
               {/* ── Social Content ── */}
               {activeTab === "Social Content" && (
                 <div>
-                  <Card title="📘 Facebook" copyText={generatedData.facebook.post}>
-                    <Field label="Post Caption" value={generatedData.facebook.post} />
-                  </Card>
+                  {(() => {
+                    const fbContent = (activeFacebookLang === "DE"
+                      ? generatedData.facebook.DE?.post
+                      : activeFacebookLang === "JP"
+                      ? generatedData.facebook.JP?.post
+                      : activeFacebookLang === "B2B"
+                      ? generatedData.facebook.B2B?.post
+                      : generatedData.facebook.EN?.post || generatedData.facebook.post) || "";
+
+                    return (
+                      <Card title="📘 Facebook" copyText={fbContent}>
+                        <div style={{ display: "flex", gap: 8, marginBottom: 12, borderBottom: "1px solid #E5E5E7", paddingBottom: 10, overflowX: "auto" }}>
+                          {[
+                            { code: "EN", flag: "🇬🇧" },
+                            { code: "DE", flag: "🇩🇪" },
+                            { code: "JP", flag: "🇯🇵" },
+                            { code: "B2B", flag: "🏢" },
+                          ].map((lang) => {
+                            const isActive = activeFacebookLang === lang.code;
+                            return (
+                              <button
+                                key={lang.code}
+                                onClick={() => setActiveFacebookLang(lang.code as "EN" | "DE" | "JP" | "B2B")}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  padding: "8px 10px",
+                                  fontSize: 12,
+                                  fontWeight: isActive ? 600 : 500,
+                                  color: isActive ? "#1d1d1f" : "#6E6E73",
+                                  background: "none",
+                                  border: "none",
+                                  borderBottom: isActive ? "2px solid #0071E3" : "2px solid transparent",
+                                  cursor: "pointer",
+                                  fontFamily: "inherit",
+                                }}
+                              >
+                                <span>{lang.flag}</span>
+                                <span>{lang.code}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <Field label={`Post Caption (${activeFacebookLang})`} value={fbContent} />
+                      </Card>
+                    );
+                  })()}
 
                   <Card
                     title="▶️ YouTube"
@@ -2410,36 +2925,75 @@ export default function Home() {
                     <Field label="Script Outline (2-min video)" value={generatedData.youtube.script_outline} />
                   </Card>
 
-                  <Card title="𝕏 Twitter / X" copyText={generatedData.twitter.thread.join("\n\n")}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {generatedData.twitter.thread.map((tweet, i) => (
-                        <div
-                          key={i}
-                          className="field-row"
-                          style={{
-                            background: "#F5F5F7",
-                            borderRadius: 10,
-                            padding: "12px",
-                          }}
-                        >
-                          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 6 }}>
-                            <span style={{ color: "#0071E3", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
-                              {i + 1}/{generatedData.twitter.thread.length}
-                            </span>
-                            <span style={{ fontSize: 13, color: "#1d1d1f", flex: 1, lineHeight: 1.5 }}>
-                              {tweet}
-                            </span>
-                            <CopyButton text={tweet} />
-                          </div>
-                          <div style={{ textAlign: "right" }}>
-                            <span style={{ fontSize: 11, color: tweet.length > 280 ? "#FF3B30" : "#AEAEB2" }}>
-                              {tweet.length}/280
-                            </span>
-                          </div>
+                  {(() => {
+                    const twitterThread = activeTwitterLang === "JP"
+                      ? generatedData.twitter.JP?.thread || []
+                      : generatedData.twitter.EN?.thread || generatedData.twitter.thread || [];
+
+                    return (
+                      <Card title="𝕏 Twitter / X" copyText={twitterThread.join("\n\n")}>
+                        <div style={{ display: "flex", gap: 8, marginBottom: 12, borderBottom: "1px solid #E5E5E7", paddingBottom: 10, overflowX: "auto" }}>
+                          {[
+                            { code: "EN", flag: "🇬🇧" },
+                            { code: "JP", flag: "🇯🇵" },
+                          ].map((lang) => {
+                            const isActive = activeTwitterLang === lang.code;
+                            return (
+                              <button
+                                key={lang.code}
+                                onClick={() => setActiveTwitterLang(lang.code as "EN" | "JP")}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  padding: "8px 10px",
+                                  fontSize: 12,
+                                  fontWeight: isActive ? 600 : 500,
+                                  color: isActive ? "#1d1d1f" : "#6E6E73",
+                                  background: "none",
+                                  border: "none",
+                                  borderBottom: isActive ? "2px solid #0071E3" : "2px solid transparent",
+                                  cursor: "pointer",
+                                  fontFamily: "inherit",
+                                }}
+                              >
+                                <span>{lang.flag}</span>
+                                <span>{lang.code}</span>
+                              </button>
+                            );
+                          })}
                         </div>
-                      ))}
-                    </div>
-                  </Card>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {twitterThread.map((tweet, i) => (
+                            <div
+                              key={i}
+                              className="field-row"
+                              style={{
+                                background: "#F5F5F7",
+                                borderRadius: 10,
+                                padding: "12px",
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 6 }}>
+                                <span style={{ color: "#0071E3", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+                                  {i + 1}/{twitterThread.length}
+                                </span>
+                                <span style={{ fontSize: 13, color: "#1d1d1f", flex: 1, lineHeight: 1.5 }}>
+                                  {tweet}
+                                </span>
+                                <CopyButton text={tweet} />
+                              </div>
+                              <div style={{ textAlign: "right" }}>
+                                <span style={{ fontSize: 11, color: tweet.length > 280 ? "#FF3B30" : "#AEAEB2" }}>
+                                  {tweet.length}/280
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </Card>
+                    );
+                  })()}
 
                   <Card title="💬 LINE" copyText={generatedData.line.message}>
                     <Field label="Message" value={generatedData.line.message} />
@@ -2515,7 +3069,7 @@ export default function Home() {
               )}
 
               {/* ── Newsletter ── */}
-              {activeTab === "Newsletter" && (
+              {activeTab === "Newsletter" && userRole && isModuleAllowed(userRole, "newsletter") && (
                 <div>
                   {/* Tone Selector */}
                   <div
@@ -2761,7 +3315,8 @@ export default function Home() {
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
       </div>
     </div>
