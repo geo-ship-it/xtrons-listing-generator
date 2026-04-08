@@ -1,9 +1,14 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getClient() {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY environment variable is not set");
+  }
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+}
 
 interface ImageInput {
   base64: string;
@@ -41,6 +46,7 @@ export async function POST(request: NextRequest) {
 Keep response under 200 tokens. Be specific and technical.`
     });
 
+    const client = getClient();
     const response = await client.chat.completions.create({
       model: "gpt-4o-mini",
       max_tokens: 300,

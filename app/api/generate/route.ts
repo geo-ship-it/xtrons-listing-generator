@@ -1,10 +1,15 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
-const client = new OpenAI({
-  baseURL: "https://api.deepseek.com",
-  apiKey: process.env.DEEPSEEK_API_KEY,
-});
+function getClient() {
+  if (!process.env.DEEPSEEK_API_KEY) {
+    throw new Error("DEEPSEEK_API_KEY environment variable is not set");
+  }
+  return new OpenAI({
+    baseURL: "https://api.deepseek.com",
+    apiKey: process.env.DEEPSEEK_API_KEY,
+  });
+}
 
 interface ImageInput {
   base64: string;
@@ -190,6 +195,7 @@ Rules:
     const MAX_TOKENS = 8192;
 
     // Run both calls in parallel
+    const client = getClient();
     const [message1, message2] = await Promise.all([
       client.chat.completions.create({
         model: MODEL,
