@@ -2,7 +2,20 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ROLE_CONFIG, RoleName, isModuleAllowed, getVisibleTabs } from "./lib/roleConfig";
+import {
+  ROLE_CONFIG,
+  RoleName,
+  isModuleAllowed,
+  getVisibleTabs,
+  getVisibleMarketplaceCards,
+  getVisibleSocialCards,
+  getVisibleAmazonMarkets,
+  getDefaultAmazonMarket,
+  getVisibleFacebookLangs,
+  getDefaultFacebookLang,
+  getVisibleTwitterLangs,
+  getDefaultTwitterLang,
+} from "./lib/roleConfig";
 
 // ─── WooCommerce Language Config ──────────────────────────────────────────────
 const WOO_LANGUAGES = [
@@ -767,8 +780,6 @@ export default function Home() {
   const [titleVariations, setTitleVariations] = useState(1);
   const router = useRouter();
   const [userRole, setUserRole] = useState<RoleName | null>(null);
-  const [imageFeatures, setImageFeatures] = useState<string | null>(null);
-  const [analyzingImages, setAnalyzingImages] = useState(false);
   const [activeEbayMarket, setActiveEbayMarket] = useState<"UK" | "US" | "AU" | "DE">("UK");
   const [activeAmazonMarket, setActiveAmazonMarket] = useState<"UK" | "US" | "DE" | "JP">("UK");
   const [newsletterTone, setNewsletterTone] = useState<NewsletterTone>("friendly");
@@ -814,39 +825,13 @@ export default function Home() {
     setUserRole(role);
   }, [router]);
 
-  // Analyze images once when they change
   useEffect(() => {
-    const analyzeImages = async () => {
-      if (allImages.length === 0) {
-        setImageFeatures(null);
-        return;
-      }
+    if (!userRole) return;
+    setActiveAmazonMarket(getDefaultAmazonMarket(userRole));
+    setActiveFacebookLang(getDefaultFacebookLang(userRole));
+    setActiveTwitterLang(getDefaultTwitterLang(userRole));
+  }, [userRole]);
 
-      setAnalyzingImages(true);
-      try {
-        const res = await fetch("/api/analyze-images", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            images: allImages.map((img) => ({
-              base64: img.base64,
-              mediaType: img.mediaType,
-            })),
-          }),
-        });
-        const json = await res.json();
-        if (json.success) {
-          setImageFeatures(json.summary);
-        }
-      } catch (err) {
-        console.error("Image analysis failed:", err);
-      } finally {
-        setAnalyzingImages(false);
-      }
-    };
-
-    analyzeImages();
-  }, [allImages.length]); // Only re-run when count changes
 
   const parseCsvRow = (line: string) => {
     const result: string[] = [];
@@ -1233,7 +1218,6 @@ export default function Home() {
         body: JSON.stringify({
           ...formData,
           language,
-          imageFeatures,
           newsletterTone,
           titleVariations,
           userRole,
@@ -1652,28 +1636,9 @@ export default function Home() {
               )}
 
               {/* Status */}
-              {analyzingImages && (
-                <div style={{ marginTop: 10, fontSize: 11, color: "#0071E3", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
-                  <svg className="animate-spin" width={11} height={11} fill="none" viewBox="0 0 24 24">
-                    <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Analyzing images...
-                </div>
-              )}
-              {!analyzingImages && imageFeatures && (
+              {allImages.length > 0 && (
                 <div style={{ marginTop: 10, fontSize: 11, color: "#34C759", fontWeight: 500 }}>
-                  ✓ {allImages.length} image{allImages.length > 1 ? "s" : ""} analyzed — features extracted
-                </div>
-              )}
-              {!analyzingImages && allImages.length > 0 && !imageFeatures && (
-                <div style={{ marginTop: 10, fontSize: 11, color: "#34C759", fontWeight: 500 }}>
-                  ✓ {allImages.length} image{allImages.length > 1 ? "s" : ""} ready
-                </div>
-              )}
-              {allImages.length === 0 && (
-                <div style={{ marginTop: 8, fontSize: 11, color: "#AEAEB2" }}>
-                  AI will analyse images to enhance listings
+                  ✓ {allImages.length} image{allImages.length > 1 ? "s" : ""} uploaded
                 </div>
               )}
             </div>
@@ -1878,8 +1843,8 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                   {allImages.length > 0
-                    ? `Generate All Listings · ${allImages.length} image${allImages.length > 1 ? "s" : ""}`
-                    : "Generate All Listings"}
+                    ? `Generate ${userRole ?? "All"} Content · ${allImages.length} image${allImages.length > 1 ? "s" : ""}`
+                    : `Generate ${userRole ?? "All"} Content`}
                 </>
               )}
             </button>
@@ -1965,7 +1930,7 @@ export default function Home() {
                   Generating listings…
                 </p>
                 <p style={{ fontSize: 13, color: "#6E6E73" }}>
-                  Claude is writing optimised content for all platforms
+                  DeepSeek is generating only the modules allowed for this role
                 </p>
               </div>
             </div>
@@ -1973,6 +1938,12 @@ export default function Home() {
 
           {generatedData && !loading && (() => {
             const visibleTabs = getVisibleTabs(userRole);
+            const visibleMarketplaceCards = getVisibleMarketplaceCards(userRole);
+            const visibleSocialCards = getVisibleSocialCards(userRole);
+            const visibleAmazonMarkets = getVisibleAmazonMarkets(userRole);
+            const visibleFacebookLangs = getVisibleFacebookLangs(userRole);
+            const visibleTwitterLangs = getVisibleTwitterLangs(userRole);
+
             // Set active tab to first visible if current is not visible
             if (visibleTabs.length > 0 && !visibleTabs.includes(activeTab)) {
               setActiveTab(visibleTabs[0] as Tab);
@@ -2023,7 +1994,7 @@ export default function Home() {
               {activeTab === "Marketplaces" && (
                 <div>
                   {/* Amazon — Multi-Market Tabs */}
-                  {(() => {
+                  {visibleMarketplaceCards.includes("amazon") && (() => {
                     const amazonMarkets = [
                       { key: "UK" as const, flag: "🇬🇧", label: "UK" },
                       { key: "US" as const, flag: "🇺🇸", label: "US" },
@@ -2084,13 +2055,18 @@ export default function Home() {
                     <div style={{ background: "#FFFFFF", border: "1px solid #E5E5E7", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
                       {/* Card header */}
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid #E5E5E7", background: "#FAFAFA" }}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f" }}>📦 Amazon</span>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f" }}>
+                          {visibleAmazonMarkets.length === 1 && visibleAmazonMarkets[0] === "JP" ? "📦 Amazon JP" : "📦 Amazon"}
+                        </span>
                         {copyText && <CopyButton text={copyText} label="Copy all" className="!opacity-100" />}
                       </div>
 
                       {/* Market tabs */}
                       <div style={{ display: "flex", gap: 0, padding: "0 16px", borderBottom: "1px solid #E5E5E7", background: "#FAFAFA" }}>
-                        {amazonMarkets.map((m) => (
+                        {visibleAmazonMarkets.map((mkt) => {
+                          const m = amazonMarkets.find((market) => market.key === mkt);
+                          if (!m) return null;
+                          return (
                           <button
                             key={m.key}
                             onClick={() => setActiveAmazonMarket(m.key)}
@@ -2106,7 +2082,8 @@ export default function Home() {
                             <span style={{ fontSize: 16 }}>{m.flag}</span>
                             <span>{m.label}</span>
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
 
                       {/* Tab content */}
@@ -2231,7 +2208,7 @@ export default function Home() {
                   })()}
 
                   {/* eBay */}
-                  {(() => {
+                  {visibleMarketplaceCards.includes("ebay") && (() => {
                     const ebayTitlesMap = generatedData.ebay.titles || {
                       UK: [generatedData.ebay.title || ""],
                       US: [generatedData.ebay.title || ""],
@@ -2357,6 +2334,7 @@ export default function Home() {
                   })()}
 
                   {/* AliExpress */}
+                  {visibleMarketplaceCards.includes("aliexpress") && (
                   <Card
                     title="🌐 AliExpress"
                     copyText={`Title: ${generatedData.aliexpress.title}\n\nDescription:\n${generatedData.aliexpress.description}`}
@@ -2364,9 +2342,10 @@ export default function Home() {
                     <Field label="Title" value={generatedData.aliexpress.title} />
                     <Field label="Description" value={generatedData.aliexpress.description} />
                   </Card>
+                  )}
 
                   {/* Alibaba */}
-                  {generatedData.alibaba && (
+                  {visibleMarketplaceCards.includes("alibaba") && generatedData.alibaba && (
                     <Card
                       title="🏭 Alibaba"
                       copyText={[
@@ -2417,62 +2396,66 @@ export default function Home() {
                     </Card>
                   )}
 
-                  {/* Yahoo Japan */}
-                  <Card
-                    title="🛍️ Yahoo!ショッピング"
-                    copyText={[
-                      `商品名: ${generatedData.yahoo_jp.product_name || generatedData.yahoo_jp.title || ""}`,
-                      `\nキャッチコピー: ${generatedData.yahoo_jp.catch_copy || ""}`,
-                      `\n商品コード: ${generatedData.yahoo_jp.product_code || ""}`,
-                      `\n検索キーワード: ${generatedData.yahoo_jp.search_keywords || ""}`,
-                      `\n商品情報要約: ${generatedData.yahoo_jp.spec_summary || ""}`,
-                      `\n\n商品説明HTML:\n${generatedData.yahoo_jp.description_html || generatedData.yahoo_jp.description || ""}`,
-                    ].join("")}
-                  >
-                    <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
-                      🇯🇵 Yahoo!ショッピング backend-style format — copy/paste ready for Japan marketplace listings
-                    </div>
-                    <Field label="商品名 (Product Name)" value={generatedData.yahoo_jp.product_name || generatedData.yahoo_jp.title || ""} />
-                    <Field label="キャッチコピー (Catch Copy)" value={generatedData.yahoo_jp.catch_copy || ""} />
-                    <Field label="商品コード (Product Code)" value={generatedData.yahoo_jp.product_code || ""} />
-                    <Field label="検索キーワード (Search Keywords)" value={generatedData.yahoo_jp.search_keywords || ""} />
-                    <Field label="商品情報要約 (Spec Summary)" value={generatedData.yahoo_jp.spec_summary || ""} />
-                    <Field label="商品説明 HTML (Description)" value={generatedData.yahoo_jp.description_html || generatedData.yahoo_jp.description || ""} />
-                  </Card>
-                  <RefinementBar
-                    onRefine={(type, custom) => handleRefine("yahoo_jp", generatedData.yahoo_jp, type, custom)}
-                    onUndo={() => handleUndoRefine("yahoo_jp", previousContent["yahoo_jp"])}
-                    hasPrevious={!!previousContent["yahoo_jp"]}
-                    isLoading={!!refineLoading["yahoo_jp"]}
-                    customText={customRefineText["yahoo_jp"] || ""}
-                    onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, yahoo_jp: v }))}
-                  />
-
                   {/* Rakuten */}
-                  <Card
-                    title="🏬 楽天市場 (Rakuten Japan)"
-                    copyText={[
-                      `商品名: ${generatedData.rakuten.product_name || generatedData.rakuten.title || ""}`,
-                      `\nキャッチコピー: ${generatedData.rakuten.catch_copy || ""}`,
-                      `\n商品説明HTML: ${generatedData.rakuten.description_html || generatedData.rakuten.description || ""}`,
-                      `\n検索キーワード: ${generatedData.rakuten.search_keywords || ""}`,
-                      `\n商品管理番号: ${generatedData.rakuten.item_number || ""}`,
-                    ].join("")}
-                  >
-                    <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
-                      🇯🇵 楽天市場バックエンド形式 — Rakuten Japan backend format
-                    </div>
-                    <Field label="商品名 (Product Name)" value={generatedData.rakuten.product_name || generatedData.rakuten.title || ""} />
-                    <Field label="キャッチコピー (Catch Copy — HTML)" value={generatedData.rakuten.catch_copy || ""} />
-                    <Field label="商品説明 HTML (Description)" value={generatedData.rakuten.description_html || generatedData.rakuten.description || ""} />
-                    <Field label="検索キーワード (Search Keywords)" value={generatedData.rakuten.search_keywords || ""} />
-                    <Field label="商品管理番号 (Item Number)" value={generatedData.rakuten.item_number || ""} />
-                  </Card>
+                  {visibleMarketplaceCards.includes("rakuten") && (
+                    <Card
+                      title="🏬 楽天市場 (Rakuten Japan)"
+                      copyText={[
+                        `商品名: ${generatedData.rakuten.product_name || generatedData.rakuten.title || ""}`,
+                        `\nキャッチコピー: ${generatedData.rakuten.catch_copy || ""}`,
+                        `\n商品説明HTML: ${generatedData.rakuten.description_html || generatedData.rakuten.description || ""}`,
+                        `\n検索キーワード: ${generatedData.rakuten.search_keywords || ""}`,
+                        `\n商品管理番号: ${generatedData.rakuten.item_number || ""}`,
+                      ].join("")}
+                    >
+                      <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
+                        🇯🇵 楽天市場バックエンド形式 — Rakuten Japan backend format
+                      </div>
+                      <Field label="商品名 (Product Name)" value={generatedData.rakuten.product_name || generatedData.rakuten.title || ""} />
+                      <Field label="キャッチコピー (Catch Copy — HTML)" value={generatedData.rakuten.catch_copy || ""} />
+                      <Field label="商品説明 HTML (Description)" value={generatedData.rakuten.description_html || generatedData.rakuten.description || ""} />
+                      <Field label="検索キーワード (Search Keywords)" value={generatedData.rakuten.search_keywords || ""} />
+                      <Field label="商品管理番号 (Item Number)" value={generatedData.rakuten.item_number || ""} />
+                    </Card>
+                  )}
 
-
+                  {/* Yahoo Japan */}
+                  {visibleMarketplaceCards.includes("yahoo_jp") && (
+                    <>
+                      <Card
+                        title="🛍️ Yahoo!ショッピング"
+                        copyText={[
+                          `商品名: ${generatedData.yahoo_jp.product_name || generatedData.yahoo_jp.title || ""}`,
+                          `\nキャッチコピー: ${generatedData.yahoo_jp.catch_copy || ""}`,
+                          `\n商品コード: ${generatedData.yahoo_jp.product_code || ""}`,
+                          `\n検索キーワード: ${generatedData.yahoo_jp.search_keywords || ""}`,
+                          `\n商品情報要約: ${generatedData.yahoo_jp.spec_summary || ""}`,
+                          `\n\n商品説明HTML:\n${generatedData.yahoo_jp.description_html || generatedData.yahoo_jp.description || ""}`,
+                        ].join("")}
+                      >
+                        <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
+                          🇯🇵 Yahoo!ショッピング backend-style format — copy/paste ready for Japan marketplace listings
+                        </div>
+                        <Field label="商品名 (Product Name)" value={generatedData.yahoo_jp.product_name || generatedData.yahoo_jp.title || ""} />
+                        <Field label="キャッチコピー (Catch Copy)" value={generatedData.yahoo_jp.catch_copy || ""} />
+                        <Field label="商品コード (Product Code)" value={generatedData.yahoo_jp.product_code || ""} />
+                        <Field label="検索キーワード (Search Keywords)" value={generatedData.yahoo_jp.search_keywords || ""} />
+                        <Field label="商品情報要約 (Spec Summary)" value={generatedData.yahoo_jp.spec_summary || ""} />
+                        <Field label="商品説明 HTML (Description)" value={generatedData.yahoo_jp.description_html || generatedData.yahoo_jp.description || ""} />
+                      </Card>
+                      <RefinementBar
+                        onRefine={(type, custom) => handleRefine("yahoo_jp", generatedData.yahoo_jp, type, custom)}
+                        onUndo={() => handleUndoRefine("yahoo_jp", previousContent["yahoo_jp"])}
+                        hasPrevious={!!previousContent["yahoo_jp"]}
+                        isLoading={!!refineLoading["yahoo_jp"]}
+                        customText={customRefineText["yahoo_jp"] || ""}
+                        onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, yahoo_jp: v }))}
+                      />
+                    </>
+                  )}
 
                   {/* Yahoo Auction */}
-                  {generatedData.yahoo_auction && (() => {
+                  {visibleMarketplaceCards.includes("yahoo_auction") && generatedData.yahoo_auction && (() => {
                     const ya = generatedData.yahoo_auction!;
                     const titleLen = ya.title ? ya.title.length : 0;
                     const titleOver = titleLen > 65;
@@ -2627,7 +2610,7 @@ export default function Home() {
                   })()}
 
                   {/* WooCommerce — Multi-Language */}
-                  {(() => {
+                  {visibleMarketplaceCards.includes("woocommerce") && (() => {
                     const activeLang = WOO_LANGUAGES.find((l) => l.code === activeWooLang)!;
                     const activeContent: WooContent | null = activeWooLang === "EN"
                       ? generatedData.woocommerce
@@ -2861,7 +2844,7 @@ export default function Home() {
               {/* ── Social Content ── */}
               {activeTab === "Social Content" && (
                 <div>
-                  {(() => {
+                  {visibleSocialCards.includes("facebook") && (() => {
                     const fbContent = (activeFacebookLang === "DE"
                       ? generatedData.facebook.DE?.post
                       : activeFacebookLang === "JP"
@@ -2871,14 +2854,16 @@ export default function Home() {
                       : generatedData.facebook.EN?.post || generatedData.facebook.post) || "";
 
                     return (
-                      <Card title="📘 Facebook" copyText={fbContent}>
+                      <Card title={visibleFacebookLangs.length === 1 && visibleFacebookLangs[0] === "JP" ? "📘 Facebook JP" : "📘 Facebook"} copyText={fbContent}>
                         <div style={{ display: "flex", gap: 8, marginBottom: 12, borderBottom: "1px solid #E5E5E7", paddingBottom: 10, overflowX: "auto" }}>
-                          {[
-                            { code: "EN", flag: "🇬🇧" },
-                            { code: "DE", flag: "🇩🇪" },
-                            { code: "JP", flag: "🇯🇵" },
-                            { code: "B2B", flag: "🏢" },
-                          ].map((lang) => {
+                          {visibleFacebookLangs.map((code) => {
+                            const lang = code === "EN"
+                              ? { code: "EN", flag: "🇬🇧" }
+                              : code === "DE"
+                              ? { code: "DE", flag: "🇩🇪" }
+                              : code === "JP"
+                              ? { code: "JP", flag: "🇯🇵" }
+                              : { code: "B2B", flag: "🏢" };
                             const isActive = activeFacebookLang === lang.code;
                             return (
                               <button
@@ -2910,33 +2895,33 @@ export default function Home() {
                     );
                   })()}
 
-                  <Card
-                    title="▶️ YouTube"
-                    copyText={[
-                      `Title: ${generatedData.youtube.title}`,
-                      `\nDescription:\n${generatedData.youtube.description}`,
-                      `\nTags: ${generatedData.youtube.tags}`,
-                      `\nScript Outline:\n${generatedData.youtube.script_outline}`,
-                    ].join("")}
-                  >
-                    <Field label="Video Title" value={generatedData.youtube.title} />
-                    <Field label="Description" value={generatedData.youtube.description} />
-                    <Field label="Tags (comma separated)" value={generatedData.youtube.tags} />
-                    <Field label="Script Outline (2-min video)" value={generatedData.youtube.script_outline} />
-                  </Card>
+                  {visibleSocialCards.includes("youtube") && (
+                    <Card
+                      title="▶️ YouTube"
+                      copyText={[
+                        `Title: ${generatedData.youtube.title}`,
+                        `\nDescription:\n${generatedData.youtube.description}`,
+                        `\nTags: ${generatedData.youtube.tags}`,
+                        `\nScript Outline:\n${generatedData.youtube.script_outline}`,
+                      ].join("")}
+                    >
+                      <Field label="Video Title" value={generatedData.youtube.title} />
+                      <Field label="Description" value={generatedData.youtube.description} />
+                      <Field label="Tags (comma separated)" value={generatedData.youtube.tags} />
+                      <Field label="Script Outline (2-min video)" value={generatedData.youtube.script_outline} />
+                    </Card>
+                  )}
 
-                  {(() => {
+                  {visibleSocialCards.includes("twitter") && (() => {
                     const twitterThread = activeTwitterLang === "JP"
                       ? generatedData.twitter.JP?.thread || []
                       : generatedData.twitter.EN?.thread || generatedData.twitter.thread || [];
 
                     return (
-                      <Card title="𝕏 Twitter / X" copyText={twitterThread.join("\n\n")}>
+                      <Card title={visibleTwitterLangs.length === 1 && visibleTwitterLangs[0] === "JP" ? "𝕏 Twitter JP" : "𝕏 Twitter / X"} copyText={twitterThread.join("\n\n")}>
                         <div style={{ display: "flex", gap: 8, marginBottom: 12, borderBottom: "1px solid #E5E5E7", paddingBottom: 10, overflowX: "auto" }}>
-                          {[
-                            { code: "EN", flag: "🇬🇧" },
-                            { code: "JP", flag: "🇯🇵" },
-                          ].map((lang) => {
+                          {visibleTwitterLangs.map((code) => {
+                            const lang = code === "JP" ? { code: "JP", flag: "🇯🇵" } : { code: "EN", flag: "🇬🇧" };
                             const isActive = activeTwitterLang === lang.code;
                             return (
                               <button
@@ -2995,17 +2980,22 @@ export default function Home() {
                     );
                   })()}
 
-                  <Card title="💬 LINE" copyText={generatedData.line.message}>
-                    <Field label="Message" value={generatedData.line.message} />
-                  </Card>
+                  {visibleSocialCards.includes("line") && (
+                    <Card title="💬 LINE" copyText={generatedData.line.message}>
+                      <Field label="Message" value={generatedData.line.message} />
+                    </Card>
+                  )}
 
-                  <Card
+                  {visibleSocialCards.includes("reddit") && (
+                    <Card
                     title="🤖 Reddit"
                     copyText={`${generatedData.reddit.title}\n\n${generatedData.reddit.body}`}
                   >
                     <Field label="Post Title · r/CarAV · r/CarPlay · r/AndroidAuto" value={generatedData.reddit.title} />
                     <Field label="Post Body" value={generatedData.reddit.body} />
                   </Card>
+                  )}
+                  {visibleSocialCards.includes("facebook") && (
                   <RefinementBar
                     onRefine={(type, custom) => handleRefine("facebook", generatedData.facebook, type, custom)}
                     onUndo={() => handleUndoRefine("facebook", previousContent["facebook"])}
@@ -3014,6 +3004,7 @@ export default function Home() {
                     customText={customRefineText["facebook"] || ""}
                     onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, facebook: v }))}
                   />
+                  )}
                 </div>
               )}
 
