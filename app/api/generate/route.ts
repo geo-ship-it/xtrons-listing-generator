@@ -92,7 +92,8 @@ export async function POST(request: NextRequest) {
 
     const MODEL = "deepseek-chat";
     const client = getClient();
-    const responses = await Promise.all(
+
+    const settled = await Promise.allSettled(
       plan.map((task) =>
         client.chat.completions.create({
           model: MODEL,
@@ -102,18 +103,26 @@ export async function POST(request: NextRequest) {
       )
     );
 
-    const parsedResponses = Object.fromEntries(
-      responses.map((message, index) => {
-        const responseText = message.choices[0]?.message?.content || "";
-        return [plan[index].key, parseJsonSafe(responseText) as Record<string, unknown>];
-      })
-    ) as Partial<Record<"marketplace" | "social", Record<string, unknown>>>;
+    const moduleErrors: Record<string, string> = {};
+    const parsed: Record<string, unknown> = {};
 
-    const parsed1 = parsedResponses.marketplace ?? {};
-    const parsed2 = parsedResponses.social ?? {};
-
-    // Merge results
-    const parsed = { ...parsed1, ...parsed2 } as Record<string, unknown>;
+    settled.forEach((result, index) => {
+      const key = plan[index].key;
+      if (result.status === "rejected") {
+        moduleErrors[key] = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        return;
+      }
+      const responseText = result.value.choices[0]?.message?.content || "";
+      try {
+        const parsedTask = parseJsonSafe(responseText) as Record<string, unknown>;
+        // Each per-platform task (amazon_jp, rakuten, yahoo_jp, yahoo_auction)
+        // returns its own top-level platform key, so a shallow merge preserves shape.
+        // Combined tasks (marketplace, social) return multiple top-level keys.
+        Object.assign(parsed, parsedTask);
+      } catch (err) {
+        moduleErrors[key] = err instanceof Error ? err.message : String(err);
+      }
+    });
 
     // Normalize eBay description fields for current UI shape
     const ebay = parsed?.ebay as Record<string, unknown> | undefined;
@@ -180,15 +189,44 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Fill empty stubs for any Japan-split module that was requested but failed,
+    // so the UI can still render its gated card (showing empty state) instead of
+    // crashing on undefined access. Only applies when the plan actually requested
+    // that module — other roles' payloads stay untouched.
+    const requested = new Set(plan.map((t) => t.key));
+    if (requested.has("amazon_jp")) {
+      ensureStub(parsed, "amazon", () => ({ JP: { title_jp: "", title_en: "", bullets_jp: ["", "", "", "", ""], keywords_jp: "", description_jp: "" } }));
+    }
+    if (requested.has("rakuten")) {
+      ensureStub(parsed, "rakuten", () => ({ product_name: "", catch_copy: "", description_html: "", search_keywords: "", item_number: "" }));
+    }
+    if (requested.has("yahoo_jp")) {
+      ensureStub(parsed, "yahoo_jp", () => ({ product_name: "", catch_copy: "", description_html: "", search_keywords: "", product_code: "", spec_summary: "" }));
+    }
+    if (requested.has("yahoo_auction")) {
+      ensureStub(parsed, "yahoo_auction", () => ({ title: "", condition: "新品", category: "", starting_price: "", buy_now_price: "", description: "", tags: "", shipping_note: "", payment_note: "" }));
+    }
+
     // Suppress unused variable warning
     void language;
 
-    return NextResponse.json({ success: true, data: parsed });
+    if (Object.keys(moduleErrors).length > 0) {
+      console.warn("Generate API partial failure:", moduleErrors);
+    }
+    const hasAnySuccess = settled.some((r) => r.status === "fulfilled");
+
+    return NextResponse.json({ success: hasAnySuccess, data: parsed, errors: moduleErrors });
   } catch (error) {
     console.error("Generate API error:", error);
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
     );
+  }
+}
+
+function ensureStub(parsed: Record<string, unknown>, key: string, make: () => Record<string, unknown>) {
+  if (parsed[key] === undefined || parsed[key] === null) {
+    parsed[key] = make();
   }
 }

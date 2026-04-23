@@ -25,8 +25,16 @@ export interface GenerateRequestPayload {
   userRole?: RoleName | string;
 }
 
+export type GenerationPromptKey =
+  | "marketplace"
+  | "social"
+  | "amazon_jp"
+  | "rakuten"
+  | "yahoo_jp"
+  | "yahoo_auction";
+
 export interface GenerationPromptTask {
-  key: "marketplace" | "social";
+  key: GenerationPromptKey;
   prompt: string;
   maxTokens: number;
 }
@@ -34,7 +42,10 @@ export interface GenerationPromptTask {
 const TOKENS = {
   geoMarketplace: 5200,
   geoSocial: 3600,
-  japanMarketplace: 2200,
+  japanAmazon: 1400,
+  japanRakuten: 900,
+  japanYahooJp: 900,
+  japanYahooAuction: 900,
   japanSocial: 1800,
   ebayMarketplace: 1800,
   amazonMarketplace: 2000,
@@ -94,19 +105,65 @@ Rules:
 - Return only JSON.`;
 }
 
-function buildJapanMarketplacePrompt(productContext: string, numVariations: number): string {
+function buildJapanAmazonPrompt(productContext: string, numVariations: number): string {
   return `You are an expert Japanese e-commerce copywriter for automotive electronics.
-Generate ONLY Japan marketplace outputs.
+Generate ONLY Amazon JP content.
 
 ${productContext}
 
 Return ONLY a raw JSON object. Use this exact structure:
-{"amazon":{"JP":{"title_jp":"","title_en":"","bullets_jp":["","","","",""],"keywords_jp":"","description_jp":""}},"rakuten":{"product_name":"","catch_copy":"","description_html":"","search_keywords":"","item_number":""},"yahoo_jp":{"product_name":"","catch_copy":"","description_html":"","search_keywords":"","product_code":"","spec_summary":""},"yahoo_auction":{"title":"","condition":"新品","category":"","starting_price":"","buy_now_price":"","description":"","tags":"","shipping_note":"","payment_note":""}}
+{"amazon":{"JP":{"title_jp":"","title_en":"","bullets_jp":["","","","",""],"keywords_jp":"","description_jp":""}}}
 
 Rules:
 - Amazon JP only. Internally consider ${numVariations} title ideas, but return only the strongest final version.
 - All content should be Japanese except title_en reference.
 - Keep outputs concise and high-conversion.
+- Return only JSON.`;
+}
+
+function buildJapanRakutenPrompt(productContext: string): string {
+  return `You are an expert Rakuten (楽天市場) copywriter for automotive electronics.
+Generate ONLY Rakuten content.
+
+${productContext}
+
+Return ONLY a raw JSON object. Use this exact structure:
+{"rakuten":{"product_name":"","catch_copy":"","description_html":"","search_keywords":"","item_number":""}}
+
+Rules:
+- Rakuten only. All content fully Japanese.
+- description_html should use simple HTML only (<p>, <br>, <ul>, <li>, <strong>).
+- search_keywords: comma-separated Japanese keywords.
+- Return only JSON.`;
+}
+
+function buildJapanYahooJpPrompt(productContext: string): string {
+  return `You are an expert Yahoo! Shopping Japan copywriter for automotive electronics.
+Generate ONLY Yahoo JP content.
+
+${productContext}
+
+Return ONLY a raw JSON object. Use this exact structure:
+{"yahoo_jp":{"product_name":"","catch_copy":"","description_html":"","search_keywords":"","product_code":"","spec_summary":""}}
+
+Rules:
+- Yahoo JP only. All content fully Japanese.
+- description_html should use simple HTML only.
+- Return only JSON.`;
+}
+
+function buildJapanYahooAuctionPrompt(productContext: string): string {
+  return `You are an expert Yahoo! Auctions Japan (ヤフオク!) listing writer for automotive electronics.
+Generate ONLY Yahoo Auction content.
+
+${productContext}
+
+Return ONLY a raw JSON object. Use this exact structure:
+{"yahoo_auction":{"title":"","condition":"新品","category":"","starting_price":"","buy_now_price":"","description":"","tags":"","shipping_note":"","payment_note":""}}
+
+Rules:
+- Yahoo Auction only. All content fully Japanese.
+- condition defaults to 新品 unless stated otherwise.
 - Return only JSON.`;
 }
 
@@ -230,7 +287,10 @@ export function buildGenerationPlan(payload: GenerateRequestPayload): Generation
   switch (role) {
     case "Japan":
       return [
-        { key: "marketplace", prompt: buildJapanMarketplacePrompt(productContext, numVariations), maxTokens: TOKENS.japanMarketplace },
+        { key: "amazon_jp", prompt: buildJapanAmazonPrompt(productContext, numVariations), maxTokens: TOKENS.japanAmazon },
+        { key: "rakuten", prompt: buildJapanRakutenPrompt(productContext), maxTokens: TOKENS.japanRakuten },
+        { key: "yahoo_jp", prompt: buildJapanYahooJpPrompt(productContext), maxTokens: TOKENS.japanYahooJp },
+        { key: "yahoo_auction", prompt: buildJapanYahooAuctionPrompt(productContext), maxTokens: TOKENS.japanYahooAuction },
         { key: "social", prompt: buildJapanSocialPrompt(productContext), maxTokens: TOKENS.japanSocial },
       ];
     case "Ebay":

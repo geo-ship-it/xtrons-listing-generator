@@ -17,31 +17,37 @@ const basePayload = {
   titleVariations: 3,
 };
 
-test("Japan generation plan excludes non-Japan platforms and uses lower token budgets", () => {
+test("Japan generation plan splits marketplace into per-module calls plus one social call", () => {
   const plan = buildGenerationPlan({ ...basePayload, userRole: "Japan" });
-  assert.equal(plan.length, 2);
+  assert.equal(plan.length, 5);
+  assert.deepEqual(
+    plan.map((task) => task.key),
+    ["amazon_jp", "rakuten", "yahoo_jp", "yahoo_auction", "social"]
+  );
 
-  const marketplace = plan.find((task) => task.key === "marketplace");
-  const social = plan.find((task) => task.key === "social");
+  const byKey = Object.fromEntries(plan.map((task) => [task.key, task]));
 
-  assert.ok(marketplace);
-  assert.ok(social);
+  // Each Japan marketplace module prompt must be scoped to exactly its own
+  // platform — no leakage of the other platforms' top-level JSON keys.
+  assert.match(byKey.amazon_jp.prompt, /\"amazon\"/i);
+  for (const foreign of [/\"rakuten\"/i, /\"yahoo_jp\"/i, /\"yahoo_auction\"/i, /\"ebay\"/i, /\"alibaba\"/i, /\"aliexpress\"/i, /\"woocommerce\"/i, /\"facebook\"/i, /\"twitter\"/i, /\"line\"/i, /\"reddit\"/i, /\"youtube\"/i]) {
+    assert.doesNotMatch(byKey.amazon_jp.prompt, foreign, `amazon_jp prompt must not mention ${foreign}`);
+  }
+  assert.match(byKey.rakuten.prompt, /\"rakuten\"/i);
+  for (const foreign of [/\"amazon\"/i, /\"yahoo_jp\"/i, /\"yahoo_auction\"/i, /\"ebay\"/i]) {
+    assert.doesNotMatch(byKey.rakuten.prompt, foreign, `rakuten prompt must not mention ${foreign}`);
+  }
+  assert.match(byKey.yahoo_jp.prompt, /\"yahoo_jp\"/i);
+  for (const foreign of [/\"amazon\"/i, /\"rakuten\"/i, /\"yahoo_auction\"/i]) {
+    assert.doesNotMatch(byKey.yahoo_jp.prompt, foreign, `yahoo_jp prompt must not mention ${foreign}`);
+  }
+  assert.match(byKey.yahoo_auction.prompt, /\"yahoo_auction\"/i);
+  for (const foreign of [/\"amazon\"/i, /\"rakuten\"/i, /\"yahoo_jp\"/i, /\"ebay\"/i]) {
+    assert.doesNotMatch(byKey.yahoo_auction.prompt, foreign, `yahoo_auction prompt must not mention ${foreign}`);
+  }
 
-  assert.equal(marketplace?.maxTokens, 2200);
-  assert.equal(social?.maxTokens, 1800);
-
-  const marketplacePrompt = marketplace?.prompt ?? "";
-  const socialPrompt = social?.prompt ?? "";
-
-  assert.match(marketplacePrompt, /\"amazon\"/i);
-  assert.match(marketplacePrompt, /\"rakuten\"/i);
-  assert.match(marketplacePrompt, /\"yahoo_jp\"/i);
-  assert.match(marketplacePrompt, /\"yahoo_auction\"/i);
-  assert.doesNotMatch(marketplacePrompt, /\"ebay\"/i);
-  assert.doesNotMatch(marketplacePrompt, /\"aliexpress\"/i);
-  assert.doesNotMatch(marketplacePrompt, /\"alibaba\"/i);
-  assert.doesNotMatch(marketplacePrompt, /\"woocommerce\"/i);
-
+  // Social call still combines all 4 Japan social surfaces.
+  const socialPrompt = byKey.social.prompt;
   assert.match(socialPrompt, /\"facebook\"/i);
   assert.match(socialPrompt, /\"twitter\"/i);
   assert.match(socialPrompt, /\"line\"/i);
@@ -49,6 +55,13 @@ test("Japan generation plan excludes non-Japan platforms and uses lower token bu
   assert.doesNotMatch(socialPrompt, /\"youtube\"/i);
   assert.doesNotMatch(socialPrompt, /\"reddit\"/i);
   assert.doesNotMatch(socialPrompt, /\"newsletter\"/i);
+
+  // Per-module budgets stay comfortably under DeepSeek single-call stall thresholds.
+  assert.ok(byKey.amazon_jp.maxTokens <= 1600, `amazon_jp budget ${byKey.amazon_jp.maxTokens} too high for fast single-call completion`);
+  assert.ok(byKey.rakuten.maxTokens <= 1000);
+  assert.ok(byKey.yahoo_jp.maxTokens <= 1000);
+  assert.ok(byKey.yahoo_auction.maxTokens <= 1000);
+  assert.equal(byKey.social.maxTokens, 1800);
 });
 
 test("Ebay generation plan only requests ebay content", () => {

@@ -174,6 +174,23 @@ interface GeneratedData {
   };
 }
 
+interface ApiResponse<T = unknown> {
+  success?: boolean;
+  error?: string;
+  errors?: Record<string, string>;
+  data?: T;
+}
+
+async function parseApiResponse<T>(res: Response): Promise<ApiResponse<T>> {
+  const rawText = await res.text();
+  try {
+    return JSON.parse(rawText) as ApiResponse<T>;
+  } catch {
+    const message = rawText.trim() || `Server returned HTTP ${res.status}`;
+    throw new Error(message);
+  }
+}
+
 const CATEGORIES = [
   "Car Stereo",
   "Roof Monitor",
@@ -1223,9 +1240,17 @@ export default function Home() {
           userRole,
         }),
       });
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error || "Generation failed");
-      setGeneratedData(json.data);
+      const json = await parseApiResponse<GeneratedData>(res);
+      const moduleMessage = json.errors && Object.keys(json.errors).length > 0
+        ? Object.entries(json.errors).map(([key, value]) => `${key}: ${value}`).join(" | ")
+        : "";
+      if (!res.ok || !json.success) {
+        throw new Error((json.error || (moduleMessage ? `Generation failed (${moduleMessage})` : "Generation failed")).trim());
+      }
+      setGeneratedData(json.data as GeneratedData);
+      if (moduleMessage) {
+        setError(`Generated with partial issues: ${moduleMessage}`);
+      }
       setNewsletterToneChanged(false);
       setActiveTab("Marketplaces");
       setWooTranslations({});
