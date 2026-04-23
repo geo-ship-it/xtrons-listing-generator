@@ -1,5 +1,10 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  extractAccessorySkus,
+  inferRegionalStoreFromUrl,
+  resolveAccessoryLinks,
+} from "../../lib/accessoryLinks";
 
 const client = new OpenAI({
   baseURL: "https://api.deepseek.com",
@@ -160,8 +165,26 @@ export async function POST(request: NextRequest) {
     }
 
     const productData = await extractProductData(markdown);
+    const sourceUrl = url;
+    const inferredStore = inferRegionalStoreFromUrl(sourceUrl);
+    const accessorySkus = extractAccessorySkus(markdown);
+    const accessoryLinks = resolveAccessoryLinks({
+      sourceUrl,
+      targetSite: inferredStore,
+      accessorySkus,
+    });
 
-    return NextResponse.json({ success: true, data: { ...productData, imageUrls } });
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...productData,
+        imageUrls,
+        sourceUrl,
+        inferredStore,
+        accessorySkus,
+        accessoryLinks,
+      },
+    });
   } catch (error) {
     console.error("Scrape URL error:", error);
     return NextResponse.json(

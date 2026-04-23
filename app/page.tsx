@@ -27,6 +27,9 @@ import {
   type WhyChooseItem,
 } from "./lib/wooFormatting";
 import {
+  type ResolvedAccessoryLink,
+} from "./lib/accessoryLinks";
+import {
   clearGenerationHistory,
   listGenerationHistory,
   loadGenerationHistory,
@@ -191,6 +194,42 @@ interface ApiResponse<T = unknown> {
   error?: string;
   errors?: Record<string, string>;
   data?: T;
+}
+
+interface ScrapedProductData {
+  productName?: string;
+  sku?: string;
+  category?: string;
+  keyFeatures?: string;
+  compatibleCars?: string;
+  screenSize?: string;
+  ramRom?: string;
+  price?: string | number;
+  shortDescription?: string;
+  sellingPoints?: string;
+  imageUrls?: string[];
+  sourceUrl?: string;
+  inferredStore?: string;
+  accessorySkus?: string[];
+  accessoryLinks?: ResolvedAccessoryLink[];
+}
+
+function mergeAccessoryLinks(...groups: Array<Array<ResolvedAccessoryLink | undefined> | undefined>): ResolvedAccessoryLink[] {
+  const merged = new Map<string, ResolvedAccessoryLink>();
+
+  for (const group of groups) {
+    for (const rawLink of group ?? []) {
+      if (!rawLink) continue;
+      const sku = String(rawLink.sku || "").trim().toUpperCase();
+      const site = String(rawLink.site || "").trim().toUpperCase() || "COM";
+      const label = String(rawLink.label || sku).trim();
+      const url = String(rawLink.url || "").trim();
+      if (!sku || !url) continue;
+      merged.set(`${site}:${sku}`, { sku, site, label: label || sku, url });
+    }
+  }
+
+  return Array.from(merged.values());
 }
 
 async function parseApiResponse<T>(res: Response): Promise<ApiResponse<T>> {
@@ -891,10 +930,12 @@ export default function Home() {
 
   // URL import state
   const [importUrl, setImportUrl] = useState("");
+  const [sourceProductUrl, setSourceProductUrl] = useState("");
   const [importing, setImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<"idle" | "success" | "error">("idle");
   const [importUrlFocused, setImportUrlFocused] = useState(false);
   const [urlImages, setUrlImages] = useState<UploadedImage[]>([]);
+  const [resolvedAccessoryLinks, setResolvedAccessoryLinks] = useState<ResolvedAccessoryLink[]>([]);
 
   // Image upload state
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
@@ -1109,15 +1150,18 @@ export default function Home() {
     setImporting(true);
     setImportStatus("idle");
     setUrlImages([]);
+    setResolvedAccessoryLinks([]);
     try {
       const res = await fetch("/api/scrape-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: importUrl.trim() }),
       });
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error || "Extraction failed");
+      const json = await parseApiResponse<ScrapedProductData>(res);
+      if (!json.success || !json.data) throw new Error(json.error || "Extraction failed");
       const d = json.data;
+      setSourceProductUrl(d.sourceUrl || importUrl.trim());
+      setResolvedAccessoryLinks(mergeAccessoryLinks(d.accessoryLinks));
       setFormData((prev) => ({
         productName: d.productName || prev.productName,
         sku: d.sku || prev.sku,
@@ -1152,6 +1196,7 @@ export default function Home() {
       setImportStatus("success");
     } catch {
       setImportStatus("error");
+      setResolvedAccessoryLinks([]);
     } finally {
       setImporting(false);
     }
@@ -1326,6 +1371,8 @@ export default function Home() {
           includeFaq,
           includeCta,
           whyChoosePreset,
+          accessoryLinks: resolvedAccessoryLinks,
+          sourceUrl: sourceProductUrl || importUrl.trim() || undefined,
         }),
       });
       const json = await parseApiResponse<GeneratedData>(res);
@@ -1340,6 +1387,10 @@ export default function Home() {
         ...(json.data as GeneratedData),
         woocommerce: normalizeWooContent({
           ...(json.data as GeneratedData).woocommerce,
+          accessory_links: mergeAccessoryLinks(
+            resolvedAccessoryLinks,
+            (json.data as GeneratedData).woocommerce?.accessory_links as ResolvedAccessoryLink[] | undefined
+          ),
           why_choose_us: includeWhyChoose ? ((json.data as GeneratedData).woocommerce?.why_choose_us?.length ? (json.data as GeneratedData).woocommerce.why_choose_us : buildWhyChoosePresetItems(whyChoosePreset)) : [],
           faq: includeFaq ? ((json.data as GeneratedData).woocommerce?.faq?.length ? (json.data as GeneratedData).woocommerce.faq : buildDefaultFaqItems()) : [],
           cta: includeCta ? (((json.data as GeneratedData).woocommerce?.cta?.headline || (json.data as GeneratedData).woocommerce?.cta?.body) ? (json.data as GeneratedData).woocommerce.cta : buildDefaultCta()) : { headline: "", body: "", button_text: "" },
@@ -1347,6 +1398,7 @@ export default function Home() {
       } as GeneratedData;
 
       setGeneratedData(nextData);
+      setResolvedAccessoryLinks(nextData.woocommerce?.accessory_links ?? []);
       if (userRole === "Japan" && nextData.woocommerce) {
         setWooTranslations({ JP: nextData.woocommerce });
         setActiveWooLang("JP");
@@ -1358,7 +1410,7 @@ export default function Home() {
         role: userRole,
         productName: formData.productName,
         sku: formData.sku,
-        sourceUrl: importUrl.trim() || undefined,
+        sourceUrl: sourceProductUrl || importUrl.trim() || undefined,
         formData: { ...formData },
         generatedData: nextData as unknown as Record<string, unknown>,
         options: {
@@ -1446,6 +1498,9 @@ export default function Home() {
       woocommerce: normalizeWooContent(restored.woocommerce),
     } as GeneratedData;
     setGeneratedData(nextData);
+    setResolvedAccessoryLinks(nextData.woocommerce?.accessory_links ?? []);
+    setImportUrl(entry.sourceUrl || "");
+    setSourceProductUrl(entry.sourceUrl || "");
     setIncludeWhyChoose(entry.options?.includeWhyChoose ?? true);
     setIncludeFaq(entry.options?.includeFaq ?? true);
     setIncludeCta(entry.options?.includeCta ?? true);
@@ -1821,6 +1876,22 @@ export default function Home() {
                     📷 {urlImages.length} product image{urlImages.length > 1 ? "s" : ""} found — included in generation
                   </div>
                   {renderThumbnails(urlImages, true)}
+                </div>
+              )}
+
+              {resolvedAccessoryLinks.length > 0 && (
+                <div style={{ marginTop: 12, padding: "10px 12px", background: "#FFFFFF", border: "1px solid #E5E5E7", borderRadius: 10 }}>
+                  <div style={{ fontSize: 11, color: "#6E6E73", fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>
+                    Accessory links detected
+                  </div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {resolvedAccessoryLinks.map((link) => (
+                      <div key={`${link.site}-${link.sku}`} style={{ fontSize: 12, color: "#1d1d1f", lineHeight: 1.5 }}>
+                        <strong>{link.label || link.sku}</strong> ({link.site})
+                        <div style={{ color: "#0071E3", wordBreak: "break-all" }}>{link.url}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -2916,6 +2987,9 @@ export default function Home() {
                           `\nShort Description: ${activeContent.short_description}`,
                           `\nLong Description (HTML):\n${combinedHtml || activeContent.long_description_html}`,
                           `\nLong Description (Plain Text):\n${combinedPlain || activeContent.long_description_text}`,
+                          activeContent.accessory_links.length
+                            ? `\nAccessory Links:\n${activeContent.accessory_links.map((item) => `${item.label || item.sku} (${item.site})\n${item.url}`).join("\n\n")}`
+                            : "",
                           `\nSEO Meta Title: ${activeContent.meta_title}`,
                           `\nSEO Meta Description: ${activeContent.meta_description}`,
                         ].join("")
@@ -3027,6 +3101,12 @@ export default function Home() {
                                   )}
                                 </div>
 
+                                {activeContent.accessory_links.length > 0 && (
+                                  <Field
+                                    label="Accessory Links"
+                                    value={activeContent.accessory_links.map((item) => `${item.label || item.sku} (${item.site})\n${item.url}`).join("\n\n")}
+                                  />
+                                )}
                                 {includeWhyChoose && activeContent.why_choose_us.length > 0 && (
                                   <Field label="Why Choose Us" value={activeContent.why_choose_us.map((item) => `${item.heading}: ${item.body}`).join("\n\n")} />
                                 )}

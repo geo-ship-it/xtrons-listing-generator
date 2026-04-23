@@ -27,6 +27,7 @@ export interface GenerateRequestPayload {
   includeFaq?: boolean;
   includeCta?: boolean;
   whyChoosePreset?: string;
+  sourceUrl?: string;
   accessoryLinks?: Array<{ sku?: string; label?: string; site?: string; url?: string }>;
 }
 

@@ -122,6 +122,24 @@ test("SEO generation plan requests only WooCommerce plus social content and AI p
   assert.doesNotMatch(social, /\"alibaba\"/i);
 });
 
+test("WooCommerce prompts include resolved accessory link metadata when provided", () => {
+  const plan = buildGenerationPlan({
+    ...basePayload,
+    userRole: "SEO",
+    accessoryLinks: [
+      { sku: "DVR023S", label: "DVR023S", site: "UK", url: "https://xtrons.co.uk/dvr023s" },
+      { sku: "CAM009", label: "CAM009", site: "UK", url: "https://xtrons.co.uk/cam009" },
+    ],
+  });
+
+  const marketplace = plan.find((task) => task.key === "marketplace")?.prompt ?? "";
+  assert.match(marketplace, /Accessory links:/i);
+  assert.match(marketplace, /DVR023S/i);
+  assert.match(marketplace, /https:\/\/xtrons\.co\.uk\/dvr023s/i);
+  assert.match(marketplace, /CAM009/i);
+  assert.match(marketplace, /https:\/\/xtrons\.co\.uk\/cam009/i);
+});
+
 test("Trading generation plan requests only Alibaba, Facebook B2B, AI picks, and newsletter", () => {
   const plan = buildGenerationPlan({ ...basePayload, userRole: "Trading" });
   assert.equal(plan.length, 2);

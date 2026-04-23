@@ -205,7 +205,15 @@ export async function POST(request: NextRequest) {
           .replace(/\n{3,}/g, "\n\n")
           .trim();
       }
-      if (!Array.isArray(woocommerce.accessory_links)) woocommerce.accessory_links = [];
+      const rawAccessoryLinks = Array.isArray(woocommerce.accessory_links) ? woocommerce.accessory_links as Array<Record<string, unknown>> : [];
+      woocommerce.accessory_links = rawAccessoryLinks
+        .map((link) => ({
+          sku: typeof link?.sku === "string" ? link.sku : "",
+          label: typeof link?.label === "string" ? link.label : (typeof link?.sku === "string" ? link.sku : ""),
+          site: typeof link?.site === "string" ? link.site : "",
+          url: typeof link?.url === "string" ? link.url : "",
+        }))
+        .filter((link) => link.sku || link.url);
       if (!Array.isArray(woocommerce.why_choose_us)) woocommerce.why_choose_us = [];
       if (!Array.isArray(woocommerce.faq)) woocommerce.faq = [];
       const cta = woocommerce.cta as Record<string, unknown> | undefined;
