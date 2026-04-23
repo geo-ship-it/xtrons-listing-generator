@@ -18,9 +18,9 @@ test("Japan role exposes exactly Marketplaces, Social Content, AI Picks tabs in 
   assert.deepEqual(getVisibleTabs("Japan"), ["Marketplaces", "Social Content", "AI Picks"]);
 });
 
-test("Japan role rejects every non-Japan module", () => {
+test("Japan role includes WooCommerce JP access while rejecting unrelated non-Japan modules", () => {
   const bannedForJapan = [
-    "amazon", "ebay", "aliexpress", "alibaba", "woocommerce",
+    "amazon", "ebay", "aliexpress", "alibaba",
     "youtube", "reddit", "facebook", "facebook_b2b", "twitter",
     "newsletter",
   ];
@@ -28,7 +28,7 @@ test("Japan role rejects every non-Japan module", () => {
     assert.equal(isModuleAllowed("Japan", mod), false, `${mod} must be hidden for Japan`);
   }
   const allowedForJapan = [
-    "amazon_jp", "rakuten", "yahoo_jp", "yahoo_auction",
+    "amazon_jp", "rakuten", "yahoo_jp", "yahoo_auction", "woocommerce",
     "line", "facebook_jp", "twitter_jp", "ai_recommendation",
   ];
   for (const mod of allowedForJapan) {
@@ -36,12 +36,13 @@ test("Japan role rejects every non-Japan module", () => {
   }
 });
 
-test("Japan role only exposes the approved marketplace cards in the required order", () => {
+test("Japan role exposes the approved marketplace cards in the required order including WooCommerce", () => {
   assert.deepEqual(getVisibleMarketplaceCards("Japan"), [
     "amazon",
     "rakuten",
     "yahoo_jp",
     "yahoo_auction",
+    "woocommerce",
   ]);
 });
 

@@ -19,10 +19,10 @@ const basePayload = {
 
 test("Japan generation plan splits marketplace into per-module calls plus one social call", () => {
   const plan = buildGenerationPlan({ ...basePayload, userRole: "Japan" });
-  assert.equal(plan.length, 5);
+  assert.equal(plan.length, 6);
   assert.deepEqual(
     plan.map((task) => task.key),
-    ["amazon_jp", "rakuten", "yahoo_jp", "yahoo_auction", "social"]
+    ["amazon_jp", "rakuten", "yahoo_jp", "yahoo_auction", "woocommerce", "social"]
   );
 
   const byKey = Object.fromEntries(plan.map((task) => [task.key, task]));
@@ -45,6 +45,10 @@ test("Japan generation plan splits marketplace into per-module calls plus one so
   for (const foreign of [/\"amazon\"/i, /\"rakuten\"/i, /\"yahoo_jp\"/i, /\"ebay\"/i]) {
     assert.doesNotMatch(byKey.yahoo_auction.prompt, foreign, `yahoo_auction prompt must not mention ${foreign}`);
   }
+  assert.match(byKey.woocommerce.prompt, /\"woocommerce\"/i);
+  for (const foreign of [/\"amazon\"/i, /\"rakuten\"/i, /\"yahoo_jp\"/i, /\"yahoo_auction\"/i, /\"ebay\"/i, /\"facebook\"/i, /\"twitter\"/i, /\"line\"/i]) {
+    assert.doesNotMatch(byKey.woocommerce.prompt, foreign, `woocommerce prompt must not mention ${foreign}`);
+  }
 
   // Social call still combines all 4 Japan social surfaces.
   const socialPrompt = byKey.social.prompt;
@@ -61,6 +65,7 @@ test("Japan generation plan splits marketplace into per-module calls plus one so
   assert.ok(byKey.rakuten.maxTokens <= 1000);
   assert.ok(byKey.yahoo_jp.maxTokens <= 1000);
   assert.ok(byKey.yahoo_auction.maxTokens <= 1000);
+  assert.ok(byKey.woocommerce.maxTokens <= 1400);
   assert.equal(byKey.social.maxTokens, 1800);
 });
 

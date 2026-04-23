@@ -43,7 +43,7 @@ function parseJsonSafe(text: string): unknown {
 // Role configuration
 const ROLE_MODULES: Record<string, string[]> = {
   Geo: ["amazon", "ebay", "aliexpress", "alibaba", "yahoo_jp", "rakuten", "woocommerce", "facebook", "youtube", "twitter", "line", "reddit", "ai_recommendation", "newsletter", "yahoo_auction"],
-  Japan: ["amazon_jp", "rakuten", "yahoo_jp", "yahoo_auction", "line", "facebook_jp", "twitter_jp", "ai_recommendation"],
+  Japan: ["amazon_jp", "rakuten", "yahoo_jp", "yahoo_auction", "woocommerce", "line", "facebook_jp", "twitter_jp", "ai_recommendation"],
   Ebay: ["ebay", "ai_recommendation"],
   Amazon: ["amazon", "ai_recommendation"],
   SEO: ["woocommerce", "facebook", "youtube", "twitter", "line", "reddit", "ai_recommendation"],
@@ -205,6 +205,9 @@ export async function POST(request: NextRequest) {
     }
     if (requested.has("yahoo_auction")) {
       ensureStub(parsed, "yahoo_auction", () => ({ title: "", condition: "新品", category: "", starting_price: "", buy_now_price: "", description: "", tags: "", shipping_note: "", payment_note: "" }));
+    }
+    if (requested.has("woocommerce")) {
+      ensureStub(parsed, "woocommerce", () => ({ title: "", short_description: "", long_description: "", meta_title: "", meta_description: "" }));
     }
 
     // Suppress unused variable warning

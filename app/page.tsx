@@ -847,6 +847,7 @@ export default function Home() {
     setActiveAmazonMarket(getDefaultAmazonMarket(userRole));
     setActiveFacebookLang(getDefaultFacebookLang(userRole));
     setActiveTwitterLang(getDefaultTwitterLang(userRole));
+    setActiveWooLang(userRole === "Japan" ? "JP" : "EN");
   }, [userRole]);
 
 
@@ -1248,13 +1249,18 @@ export default function Home() {
         throw new Error((json.error || (moduleMessage ? `Generation failed (${moduleMessage})` : "Generation failed")).trim());
       }
       setGeneratedData(json.data as GeneratedData);
+      if (userRole === "Japan" && (json.data as GeneratedData).woocommerce) {
+        setWooTranslations({ JP: (json.data as GeneratedData).woocommerce });
+        setActiveWooLang("JP");
+      } else {
+        setWooTranslations({});
+        setActiveWooLang("EN");
+      }
       if (moduleMessage) {
         setError(`Generated with partial issues: ${moduleMessage}`);
       }
       setNewsletterToneChanged(false);
       setActiveTab("Marketplaces");
-      setWooTranslations({});
-      setActiveWooLang("EN");
       setRefinedContent({});
       setPreviousContent({});
       setRefineLoading({});

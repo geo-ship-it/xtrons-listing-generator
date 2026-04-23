@@ -31,7 +31,8 @@ export type GenerationPromptKey =
   | "amazon_jp"
   | "rakuten"
   | "yahoo_jp"
-  | "yahoo_auction";
+  | "yahoo_auction"
+  | "woocommerce";
 
 export interface GenerationPromptTask {
   key: GenerationPromptKey;
@@ -46,6 +47,7 @@ const TOKENS = {
   japanRakuten: 900,
   japanYahooJp: 900,
   japanYahooAuction: 900,
+  japanWooCommerce: 1200,
   japanSocial: 1800,
   ebayMarketplace: 1800,
   amazonMarketplace: 2000,
@@ -164,6 +166,23 @@ Return ONLY a raw JSON object. Use this exact structure:
 Rules:
 - Yahoo Auction only. All content fully Japanese.
 - condition defaults to 新品 unless stated otherwise.
+- Return only JSON.`;
+}
+
+function buildJapanWooCommercePrompt(productContext: string): string {
+  return `You are a Japanese WooCommerce SEO content expert for automotive electronics.
+Generate ONLY WooCommerce content for this product in Japanese.
+
+${productContext}
+
+Return ONLY a raw JSON object. Use this exact structure:
+{"woocommerce":{"title":"","short_description":"","long_description":"","meta_title":"","meta_description":""}}
+
+Rules:
+- WooCommerce only.
+- All fields must be written in natural Japanese for an e-commerce product page.
+- long_description should use simple HTML only.
+- Keep SEO strong for Japanese search terms and buyer intent.
 - Return only JSON.`;
 }
 
@@ -291,6 +310,7 @@ export function buildGenerationPlan(payload: GenerateRequestPayload): Generation
         { key: "rakuten", prompt: buildJapanRakutenPrompt(productContext), maxTokens: TOKENS.japanRakuten },
         { key: "yahoo_jp", prompt: buildJapanYahooJpPrompt(productContext), maxTokens: TOKENS.japanYahooJp },
         { key: "yahoo_auction", prompt: buildJapanYahooAuctionPrompt(productContext), maxTokens: TOKENS.japanYahooAuction },
+        { key: "woocommerce", prompt: buildJapanWooCommercePrompt(productContext), maxTokens: TOKENS.japanWooCommerce },
         { key: "social", prompt: buildJapanSocialPrompt(productContext), maxTokens: TOKENS.japanSocial },
       ];
     case "Ebay":
