@@ -9,9 +9,14 @@ const client = new OpenAI({
 interface WooContent {
   title: string;
   short_description: string;
-  long_description: string;
+  long_description_html: string;
+  long_description_text: string;
   meta_title: string;
   meta_description: string;
+  accessory_links?: Array<{ sku?: string; label?: string; site?: string; url?: string }>;
+  why_choose_us?: Array<{ heading?: string; body?: string }>;
+  faq?: Array<{ question?: string; answer?: string }>;
+  cta?: { headline?: string; body?: string; button_text?: string };
 }
 
 export async function POST(request: NextRequest) {
@@ -38,7 +43,10 @@ Product: ${productName}
 English content to translate:
 ${JSON.stringify(wooContent, null, 2)}
 
-Return ONLY valid JSON with the exact same structure (title, short_description, long_description, meta_title, meta_description). No markdown, no code blocks, no explanation — just the raw JSON object.`;
+Rules:
+- Translate title, short_description, long_description_html, long_description_text, meta_title, meta_description, why_choose_us, faq, and cta naturally.
+- Preserve accessory_links URLs exactly as provided. You may translate labels if needed, but do not alter URLs.
+- Return ONLY valid JSON with the same overall structure. No markdown, no code blocks, no explanation — just the raw JSON object.`;
 
     const message = await client.chat.completions.create({
       model: "deepseek-chat",

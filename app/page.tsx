@@ -16,6 +16,25 @@ import {
   getVisibleTwitterLangs,
   getDefaultTwitterLang,
 } from "./lib/roleConfig";
+import {
+  buildCombinedWooHtml,
+  htmlToPlainText,
+  normalizeWooContent,
+  plainTextToSimpleHtml,
+  type CtaBlock,
+  type ExtendedWooContent,
+  type FaqItem,
+  type WhyChooseItem,
+} from "./lib/wooFormatting";
+import {
+  clearGenerationHistory,
+  listGenerationHistory,
+  loadGenerationHistory,
+  makeGenerationHistoryEntry,
+  removeGenerationHistory,
+  saveGenerationHistory,
+  type GenerationHistoryEntry,
+} from "./lib/generationHistory";
 
 // ─── WooCommerce Language Config ──────────────────────────────────────────────
 const WOO_LANGUAGES = [
@@ -30,14 +49,7 @@ const WOO_LANGUAGES = [
 ] as const;
 type WooLangCode = typeof WOO_LANGUAGES[number]["code"];
 
-// ─── WooContent type ─────────────────────────────────────────────────────────
-interface WooContent {
-  title: string;
-  short_description: string;
-  long_description: string;
-  meta_title: string;
-  meta_description: string;
-}
+type WooContent = ExtendedWooContent;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface FormData {
@@ -191,6 +203,52 @@ async function parseApiResponse<T>(res: Response): Promise<ApiResponse<T>> {
   }
 }
 
+function buildWhyChoosePresetItems(preset: WhyChoosePreset): WhyChooseItem[] {
+  switch (preset) {
+    case "after-sales-support":
+      return [
+        { heading: "Professional support team", body: "Get fast answers from specialists who understand XTRONS product fitment and setup." },
+        { heading: "Clear setup guidance", body: "We help buyers reduce installation friction with practical pre-sales and after-sales guidance." },
+        { heading: "Reliable follow-up", body: "From compatibility checks to post-purchase support, buyers know where to go for help." },
+      ];
+    case "compatibility-certifications":
+      return [
+        { heading: "Vehicle-focused compatibility", body: "Designed around supported vehicle systems, trims, and fitment requirements." },
+        { heading: "Integration confidence", body: "Built to work smoothly with key OEM functions where supported." },
+        { heading: "Reduced buyer uncertainty", body: "Clear compatibility positioning helps buyers choose the correct unit faster." },
+      ];
+    case "fast-dispatch":
+      return [
+        { heading: "Fast dispatch", body: "In-stock products can be processed quickly to reduce delivery delays." },
+        { heading: "Efficient fulfilment", body: "Operational workflows are designed to keep orders moving without unnecessary hold-ups." },
+        { heading: "Better buying momentum", body: "Faster order handling helps convert shoppers who are ready to buy now." },
+      ];
+    case "quality-assurance":
+    default:
+      return [
+        { heading: "Quality-focused build", body: "XTRONS products are positioned around reliable hardware, fitment, and day-to-day usability." },
+        { heading: "Performance-led specification", body: "Key components are selected to support smoother operation, responsive control, and practical in-car use." },
+        { heading: "Trusted product positioning", body: "Clear product messaging helps buyers understand the difference versus generic alternatives." },
+      ];
+  }
+}
+
+function buildDefaultFaqItems(): FaqItem[] {
+  return [
+    { question: "Is it plug-and-play?", answer: "Fitment depends on the supported vehicle and system. Please check the compatibility details before ordering." },
+    { question: "Does it support 4G?", answer: "Support depends on the specific model and available hardware configuration. Check the product specifications for details." },
+    { question: "How long is the warranty?", answer: "Warranty coverage depends on the store policy and region. Contact support if you need confirmation before purchase." },
+  ];
+}
+
+function buildDefaultCta(): CtaBlock {
+  return {
+    headline: "Need help choosing the right unit?",
+    body: "Have questions about compatibility, features, or installation? Contact our support team for a quick answer.",
+    button_text: "Contact Support",
+  };
+}
+
 const CATEGORIES = [
   "Car Stereo",
   "Roof Monitor",
@@ -209,6 +267,14 @@ const NEWSLETTER_TONES = [
   { id: "luxury", label: "Luxury", emoji: "✨" },
 ] as const;
 type NewsletterTone = typeof NEWSLETTER_TONES[number]["id"];
+
+const WHY_CHOOSE_PRESETS = [
+  { id: "quality-assurance", label: "Quality assurance" },
+  { id: "after-sales-support", label: "Professional after-sales support" },
+  { id: "compatibility-certifications", label: "Compatibility certifications" },
+  { id: "fast-dispatch", label: "Fast dispatch" },
+] as const;
+type WhyChoosePreset = typeof WHY_CHOOSE_PRESETS[number]["id"];
 
 // ─── Refinement Bar ───────────────────────────────────────────────────────────
 const REFINE_BUTTONS = [
@@ -809,6 +875,13 @@ export default function Home() {
   const [wooTranslations, setWooTranslations] = useState<Record<string, WooContent>>({});
   const [wooLangLoading, setWooLangLoading] = useState<Record<string, boolean>>({});
   const [activeWooLang, setActiveWooLang] = useState<WooLangCode>("EN");
+  const [wooViewMode, setWooViewMode] = useState<"html" | "plain">("html");
+  const [includeWhyChoose, setIncludeWhyChoose] = useState(true);
+  const [includeFaq, setIncludeFaq] = useState(true);
+  const [includeCta, setIncludeCta] = useState(true);
+  const [whyChoosePreset, setWhyChoosePreset] = useState<WhyChoosePreset>("quality-assurance");
+  const [historyItems, setHistoryItems] = useState<GenerationHistoryEntry[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Refinement state (per platform)
   const [refinedContent, setRefinedContent] = useState<Record<string, unknown>>({});
@@ -840,6 +913,7 @@ export default function Home() {
       return;
     }
     setUserRole(role);
+    setHistoryItems(listGenerationHistory());
   }, [router]);
 
   useEffect(() => {
@@ -878,6 +952,8 @@ export default function Home() {
   };
 
   const exportWooFormat = (content: WooContent, langCode: string) => {
+    const combinedHtml = buildCombinedWooHtml(content, { includeWhyChoose, includeFaq, includeCta });
+    const combinedPlain = htmlToPlainText(combinedHtml || content.long_description_html);
     const text = [
       `WooCommerce Export (${langCode})`,
       "",
@@ -887,7 +963,10 @@ export default function Home() {
       content.short_description,
       "",
       "Long Description (HTML):",
-      content.long_description,
+      combinedHtml || content.long_description_html,
+      "",
+      "Long Description (Plain Text):",
+      combinedPlain || content.long_description_text,
       "",
       `SEO Meta Title: ${content.meta_title}`,
       "",
@@ -921,12 +1000,14 @@ export default function Home() {
       "Language",
     ];
 
+    const combinedHtml = buildCombinedWooHtml(content, { includeWhyChoose, includeFaq, includeCta });
     const escapeCsv = (value: string) => `"${String(value || "").replace(/"/g, '""')}"`;
     const row = [
       content.title,
       formData.sku || "",
       content.short_description,
-      content.long_description,
+      combinedHtml || content.long_description_html,
+
       formData.productName.toLowerCase().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, ""),
       formData.category || "",
       formData.compatibleCars || "",
@@ -977,13 +1058,15 @@ export default function Home() {
       if (!prev) return prev;
       return {
         ...prev,
-        woocommerce: {
+        woocommerce: normalizeWooContent({
+          ...prev.woocommerce,
           title: get("name", "title") || prev.woocommerce.title,
           short_description: get("short description", "excerpt") || prev.woocommerce.short_description,
-          long_description: get("description", "long description") || prev.woocommerce.long_description,
+          long_description_html: get("description", "long description") || prev.woocommerce.long_description_html,
+          long_description_text: htmlToPlainText(get("description", "long description") || prev.woocommerce.long_description_html),
           meta_title: get("meta: title", "meta title") || prev.woocommerce.meta_title,
           meta_description: get("meta: description", "meta description") || prev.woocommerce.meta_description,
-        },
+        }),
       };
     });
   };
@@ -1239,6 +1322,10 @@ export default function Home() {
           newsletterTone,
           titleVariations,
           userRole,
+          includeWhyChoose,
+          includeFaq,
+          includeCta,
+          whyChoosePreset,
         }),
       });
       const json = await parseApiResponse<GeneratedData>(res);
@@ -1248,19 +1335,48 @@ export default function Home() {
       if (!res.ok || !json.success) {
         throw new Error((json.error || (moduleMessage ? `Generation failed (${moduleMessage})` : "Generation failed")).trim());
       }
-      setGeneratedData(json.data as GeneratedData);
-      if (userRole === "Japan" && (json.data as GeneratedData).woocommerce) {
-        setWooTranslations({ JP: (json.data as GeneratedData).woocommerce });
+
+      const nextData = {
+        ...(json.data as GeneratedData),
+        woocommerce: normalizeWooContent({
+          ...(json.data as GeneratedData).woocommerce,
+          why_choose_us: includeWhyChoose ? ((json.data as GeneratedData).woocommerce?.why_choose_us?.length ? (json.data as GeneratedData).woocommerce.why_choose_us : buildWhyChoosePresetItems(whyChoosePreset)) : [],
+          faq: includeFaq ? ((json.data as GeneratedData).woocommerce?.faq?.length ? (json.data as GeneratedData).woocommerce.faq : buildDefaultFaqItems()) : [],
+          cta: includeCta ? (((json.data as GeneratedData).woocommerce?.cta?.headline || (json.data as GeneratedData).woocommerce?.cta?.body) ? (json.data as GeneratedData).woocommerce.cta : buildDefaultCta()) : { headline: "", body: "", button_text: "" },
+        }),
+      } as GeneratedData;
+
+      setGeneratedData(nextData);
+      if (userRole === "Japan" && nextData.woocommerce) {
+        setWooTranslations({ JP: nextData.woocommerce });
         setActiveWooLang("JP");
       } else {
         setWooTranslations({});
         setActiveWooLang("EN");
       }
+      const historyEntry = makeGenerationHistoryEntry({
+        role: userRole,
+        productName: formData.productName,
+        sku: formData.sku,
+        sourceUrl: importUrl.trim() || undefined,
+        formData: { ...formData },
+        generatedData: nextData as unknown as Record<string, unknown>,
+        options: {
+          includeWhyChoose,
+          includeFaq,
+          includeCta,
+          whyChoosePreset,
+          wooViewMode: "html",
+        },
+      });
+      saveGenerationHistory(historyEntry);
+      setHistoryItems(listGenerationHistory());
       if (moduleMessage) {
         setError(`Generated with partial issues: ${moduleMessage}`);
       }
       setNewsletterToneChanged(false);
       setActiveTab("Marketplaces");
+      setWooViewMode("html");
       setRefinedContent({});
       setPreviousContent({});
       setRefineLoading({});
@@ -1311,11 +1427,66 @@ export default function Home() {
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Translation failed");
-      setWooTranslations((prev) => ({ ...prev, [langCode]: json.data }));
+      setWooTranslations((prev) => ({ ...prev, [langCode]: normalizeWooContent(json.data) }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Translation failed");
     } finally {
       setWooLangLoading((prev) => ({ ...prev, [langCode]: false }));
+    }
+  };
+
+  const handleRestoreHistory = (entryId: string) => {
+    const entry = loadGenerationHistory(entryId);
+    if (!entry) return;
+    setUserRole(entry.role as RoleName);
+    setFormData((prev) => ({ ...prev, ...(entry.formData as Partial<FormData>) }));
+    const restored = entry.generatedData as Partial<GeneratedData>;
+    const nextData = {
+      ...restored,
+      woocommerce: normalizeWooContent(restored.woocommerce),
+    } as GeneratedData;
+    setGeneratedData(nextData);
+    setIncludeWhyChoose(entry.options?.includeWhyChoose ?? true);
+    setIncludeFaq(entry.options?.includeFaq ?? true);
+    setIncludeCta(entry.options?.includeCta ?? true);
+    setWhyChoosePreset((entry.options?.whyChoosePreset as WhyChoosePreset) ?? "quality-assurance");
+    setHistoryOpen(false);
+    setWooViewMode(entry.options?.wooViewMode ?? "html");
+    setActiveTab("Marketplaces");
+    if (entry.role === "Japan") {
+      setActiveWooLang("JP");
+      setWooTranslations({ JP: nextData.woocommerce });
+    } else {
+      setWooTranslations({});
+      setActiveWooLang("EN");
+    }
+  };
+
+  const handleDeleteHistoryEntry = (entryId: string) => {
+    removeGenerationHistory(entryId);
+    setHistoryItems(listGenerationHistory());
+  };
+
+  const updateActiveWooContent = (updater: (current: WooContent) => WooContent) => {
+    if (!generatedData) return;
+    if (activeWooLang === "EN") {
+      setGeneratedData((prev) => prev ? { ...prev, woocommerce: updater(normalizeWooContent(prev.woocommerce)) } : prev);
+      return;
+    }
+    setWooTranslations((prev) => ({ ...prev, [activeWooLang]: updater(normalizeWooContent(prev[activeWooLang] || generatedData.woocommerce)) }));
+  };
+
+  const handleClearHistory = () => {
+    clearGenerationHistory();
+    setHistoryItems([]);
+  };
+
+  const handleCopyWooContent = async (content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setError("Copied WooCommerce content to clipboard.");
+    } catch {
+      setError("Failed to copy WooCommerce content.");
     }
   };
 
@@ -1435,6 +1606,21 @@ export default function Home() {
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button
+              onClick={() => setHistoryOpen((prev) => !prev)}
+              style={{
+                fontSize: 12,
+                color: "#1d1d1f",
+                background: "#FFFFFF",
+                border: "1px solid #D2D2D7",
+                padding: "4px 10px",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              History ({historyItems.length})
+            </button>
             {userRole && (
               <div
                 style={{
@@ -1471,6 +1657,44 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {historyOpen && (
+        <div style={{ maxWidth: 1600, margin: "0 auto", padding: "16px 32px 0" }}>
+          <div style={{ background: "#FFFFFF", border: "1px solid #E5E5E7", borderRadius: 14, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f" }}>Generation History</div>
+                <div style={{ fontSize: 12, color: "#6E6E73", marginTop: 2 }}>Automatically saved locally in this browser.</div>
+              </div>
+              <button
+                onClick={handleClearHistory}
+                style={{ fontSize: 12, color: historyItems.length ? "#FF3B30" : "#AEAEB2", background: "transparent", border: "1px solid #D2D2D7", padding: "6px 10px", borderRadius: 8, cursor: historyItems.length ? "pointer" : "not-allowed", fontFamily: "inherit" }}
+                disabled={!historyItems.length}
+              >
+                Clear History
+              </button>
+            </div>
+            {!historyItems.length ? (
+              <div style={{ fontSize: 13, color: "#6E6E73" }}>No saved generations yet.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {historyItems.map((item) => (
+                  <div key={item.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, border: "1px solid #F0F0F2", borderRadius: 10, padding: "10px 12px", background: "#FAFAFA" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1d1d1f" }}>{item.productName || "Untitled product"}</div>
+                      <div style={{ fontSize: 12, color: "#6E6E73", marginTop: 2 }}>SKU: {item.sku || "—"} · Role: {item.role} · {new Date(item.createdAt).toLocaleString()}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                      <button onClick={() => handleRestoreHistory(item.id)} style={{ fontSize: 12, fontWeight: 600, color: "#0071E3", background: "#EAF3FF", border: "none", padding: "6px 10px", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>Restore</button>
+                      <button onClick={() => handleDeleteHistoryEntry(item.id)} style={{ fontSize: 12, fontWeight: 600, color: "#FF3B30", background: "#FFF2F0", border: "none", padding: "6px 10px", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>Delete</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Layout ── */}
       <div
@@ -1798,6 +2022,35 @@ export default function Home() {
                 placeholder="What makes this better than competitors? Key advantages..."
               />
             </InputField>
+
+            <div style={{ background: "#FAFAFA", border: "1px solid #E5E5E7", borderRadius: 12, padding: 12, marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73", marginBottom: 10 }}>
+                WooCommerce Enhancements
+              </div>
+              <div style={{ display: "grid", gap: 10 }}>
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13, color: "#1d1d1f" }}>
+                  <span>Include “Why Choose Us”</span>
+                  <input type="checkbox" checked={includeWhyChoose} onChange={(e) => setIncludeWhyChoose(e.target.checked)} />
+                </label>
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13, color: "#1d1d1f" }}>
+                  <span>Include FAQ</span>
+                  <input type="checkbox" checked={includeFaq} onChange={(e) => setIncludeFaq(e.target.checked)} />
+                </label>
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13, color: "#1d1d1f" }}>
+                  <span>Include CTA</span>
+                  <input type="checkbox" checked={includeCta} onChange={(e) => setIncludeCta(e.target.checked)} />
+                </label>
+                <div>
+                  <div style={{ fontSize: 12, color: "#6E6E73", marginBottom: 6 }}>Why Choose preset</div>
+                  <SelectInput
+                    name="whyChoosePreset"
+                    value={whyChoosePreset}
+                    onChange={(e) => setWhyChoosePreset(e.target.value as WhyChoosePreset)}
+                    options={WHY_CHOOSE_PRESETS.map((preset) => preset.id)}
+                  />
+                </div>
+              </div>
+            </div>
 
             {error && (
               <div
@@ -2644,14 +2897,25 @@ export default function Home() {
                   {visibleMarketplaceCards.includes("woocommerce") && (() => {
                     const activeLang = WOO_LANGUAGES.find((l) => l.code === activeWooLang)!;
                     const activeContent: WooContent | null = activeWooLang === "EN"
-                      ? generatedData.woocommerce
-                      : wooTranslations[activeWooLang] || null;
+                      ? normalizeWooContent(generatedData.woocommerce)
+                      : (wooTranslations[activeWooLang] ? normalizeWooContent(wooTranslations[activeWooLang]) : null);
 
+                    const combinedHtml = activeContent
+                      ? buildCombinedWooHtml(activeContent, {
+                          includeWhyChoose,
+                          includeFaq,
+                          includeCta,
+                        })
+                      : "";
+                    const combinedPlain = activeContent
+                      ? htmlToPlainText(combinedHtml || activeContent.long_description_html)
+                      : "";
                     const copyText = activeContent
                       ? [
                           `Product Title: ${activeContent.title}`,
                           `\nShort Description: ${activeContent.short_description}`,
-                          `\nLong Description:\n${activeContent.long_description}`,
+                          `\nLong Description (HTML):\n${combinedHtml || activeContent.long_description_html}`,
+                          `\nLong Description (Plain Text):\n${combinedPlain || activeContent.long_description_text}`,
                           `\nSEO Meta Title: ${activeContent.meta_title}`,
                           `\nSEO Meta Description: ${activeContent.meta_description}`,
                         ].join("")
@@ -2659,213 +2923,155 @@ export default function Home() {
 
                     return (
                       <>
-                      <div
-                        style={{
-                          background: "#FFFFFF",
-                          border: "1px solid #E5E5E7",
-                          borderRadius: 12,
-                          overflow: "hidden",
-                          marginBottom: 16,
-                        }}
-                      >
-                        {/* Card header */}
                         <div
                           style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            padding: "12px 16px",
-                            borderBottom: "1px solid #E5E5E7",
-                            background: "#FAFAFA",
+                            background: "#FFFFFF",
+                            border: "1px solid #E5E5E7",
+                            borderRadius: 12,
+                            overflow: "hidden",
+                            marginBottom: 16,
                           }}
                         >
-                          <span style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f" }}>🛍️ WooCommerce</span>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <input
-                              ref={wooImportInputRef}
-                              type="file"
-                              accept=".csv,text/csv"
-                              style={{ display: "none" }}
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                try {
-                                  await handleImportWooCsv(file);
-                                } catch (err) {
-                                  setError(err instanceof Error ? err.message : "WooCommerce CSV import failed");
-                                } finally {
-                                  e.target.value = "";
-                                }
-                              }}
-                            />
-                            <button
-                              onClick={() => wooImportInputRef.current?.click()}
-                              style={{
-                                height: 30,
-                                padding: "0 12px",
-                                background: "#FFFFFF",
-                                color: "#0071E3",
-                                border: "1px solid #0071E3",
-                                borderRadius: 8,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                cursor: "pointer",
-                                fontFamily: "inherit",
-                              }}
-                            >
-                              Import CSV
-                            </button>
-                            {activeContent && (
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              padding: "12px 16px",
+                              borderBottom: "1px solid #E5E5E7",
+                              background: "#FAFAFA",
+                            }}
+                          >
+                            <span style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f" }}>🛍️ WooCommerce</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                              <input
+                                ref={wooImportInputRef}
+                                type="file"
+                                accept=".csv,text/csv"
+                                style={{ display: "none" }}
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  try {
+                                    await handleImportWooCsv(file);
+                                  } catch (err) {
+                                    setError(err instanceof Error ? err.message : "WooCommerce CSV import failed");
+                                  } finally {
+                                    e.target.value = "";
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={() => wooImportInputRef.current?.click()}
+                                style={{ height: 30, padding: "0 12px", background: "#FFFFFF", color: "#0071E3", border: "1px solid #0071E3", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                              >
+                                Import CSV
+                              </button>
+                              {activeContent && (
+                                <>
+                                  <button onClick={() => exportWooCsv(activeContent, activeWooLang)} style={{ height: 30, padding: "0 12px", background: "#FF9500", color: "#FFFFFF", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Export CSV</button>
+                                  <button onClick={() => exportWooFormat(activeContent, activeWooLang)} style={{ height: 30, padding: "0 12px", background: "#34C759", color: "#FFFFFF", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Export TXT</button>
+                                  <button onClick={() => handleCopyWooContent(wooViewMode === "html" ? combinedHtml : combinedPlain)} style={{ height: 30, padding: "0 12px", background: "#1d1d1f", color: "#FFFFFF", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Copy {wooViewMode === "html" ? "HTML" : "Plain"}</button>
+                                </>
+                              )}
+                              {copyText && <CopyButton text={copyText} label="Copy all" className="!opacity-100" />}
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", gap: 0, padding: "0 16px", borderBottom: "1px solid #E5E5E7", background: "#FAFAFA", overflowX: "auto" }}>
+                            {WOO_LANGUAGES.map((lang) => {
+                              const isActive = activeWooLang === lang.code;
+                              const isGenerated = lang.code === "EN" || !!wooTranslations[lang.code];
+                              return (
+                                <button
+                                  key={lang.code}
+                                  onClick={() => setActiveWooLang(lang.code)}
+                                  style={{ display: "flex", alignItems: "center", gap: 4, padding: "9px 10px", fontSize: 12, fontWeight: isActive ? 600 : 400, color: isActive ? "#1d1d1f" : "#AEAEB2", background: "none", border: "none", borderBottom: isActive ? "2px solid #0071E3" : "2px solid transparent", cursor: "pointer", transition: "all 0.15s ease", fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 }}
+                                >
+                                  <span style={{ fontSize: 14 }}>{lang.flag}</span>
+                                  <span>{lang.label}</span>
+                                  {isGenerated && lang.code !== "EN" && <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#34C759", display: "inline-block", marginLeft: 2 }} />}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <div style={{ padding: 16 }}>
+                            {activeContent ? (
                               <>
-                                <button
-                                  onClick={() => exportWooCsv(activeContent, activeWooLang)}
-                                  style={{
-                                    height: 30,
-                                    padding: "0 12px",
-                                    background: "#FF9500",
-                                    color: "#FFFFFF",
-                                    border: "none",
-                                    borderRadius: 8,
-                                    fontSize: 12,
-                                    fontWeight: 600,
-                                    cursor: "pointer",
-                                    fontFamily: "inherit",
-                                  }}
-                                >
-                                  Export CSV
-                                </button>
-                                <button
-                                  onClick={() => exportWooFormat(activeContent, activeWooLang)}
-                                  style={{
-                                    height: 30,
-                                    padding: "0 12px",
-                                    background: "#34C759",
-                                    color: "#FFFFFF",
-                                    border: "none",
-                                    borderRadius: 8,
-                                    fontSize: 12,
-                                    fontWeight: 600,
-                                    cursor: "pointer",
-                                    fontFamily: "inherit",
-                                  }}
-                                >
-                                  Export TXT
-                                </button>
+                                <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
+                                  🧩 WooCommerce master section — HTML + Plain Text dual mode with reusable sections
+                                </div>
+                                <Field label="Product Title / Name" value={activeContent.title} />
+                                <Field label="Short Description / Excerpt" value={activeContent.short_description} />
+                                <Field label="SEO Meta Title" value={activeContent.meta_title} />
+                                <Field label="SEO Meta Description" value={activeContent.meta_description} />
+
+                                <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                                  <button onClick={() => setWooViewMode("html")} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: wooViewMode === "html" ? "#0071E3" : "#F5F5F7", color: wooViewMode === "html" ? "#FFFFFF" : "#1d1d1f", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>HTML mode</button>
+                                  <button onClick={() => setWooViewMode("plain")} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: wooViewMode === "plain" ? "#0071E3" : "#F5F5F7", color: wooViewMode === "plain" ? "#FFFFFF" : "#1d1d1f", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Plain Text mode</button>
+                                  <button onClick={() => updateActiveWooContent((current) => normalizeWooContent({ ...current, long_description_text: htmlToPlainText(combinedHtml || current.long_description_html) }))} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #D2D2D7", background: "#FFFFFF", color: "#1d1d1f", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Convert HTML → Plain</button>
+                                  <button onClick={() => updateActiveWooContent((current) => normalizeWooContent({ ...current, long_description_html: plainTextToSimpleHtml(current.long_description_text) }))} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #D2D2D7", background: "#FFFFFF", color: "#1d1d1f", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Convert Plain → HTML</button>
+                                </div>
+
+                                <div style={{ marginBottom: 16 }}>
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                                    <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#6E6E73" }}>
+                                      {wooViewMode === "html" ? "Long Description / HTML Preview" : "Long Description / Plain Text Preview"}
+                                    </span>
+                                  </div>
+                                  {wooViewMode === "html" ? (
+                                    <div style={{ background: "#F5F5F7", borderRadius: 10, padding: "12px 14px", fontSize: 13, color: "#1d1d1f", lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: combinedHtml || activeContent.long_description_html || "<p></p>" }} />
+                                  ) : (
+                                    <textarea readOnly value={combinedPlain || activeContent.long_description_text} rows={14} style={{ width: "100%", background: "#F5F5F7", border: "none", borderRadius: 10, padding: "10px 12px", fontSize: 13, color: "#1d1d1f", lineHeight: 1.6, resize: "vertical", fontFamily: "inherit", outline: "none" }} />
+                                  )}
+                                </div>
+
+                                {includeWhyChoose && activeContent.why_choose_us.length > 0 && (
+                                  <Field label="Why Choose Us" value={activeContent.why_choose_us.map((item) => `${item.heading}: ${item.body}`).join("\n\n")} />
+                                )}
+                                {includeFaq && activeContent.faq.length > 0 && (
+                                  <Field label="FAQ" value={activeContent.faq.map((item) => `Q: ${item.question}\nA: ${item.answer}`).join("\n\n")} />
+                                )}
+                                {includeCta && (activeContent.cta.headline || activeContent.cta.body) && (
+                                  <Field label="Call To Action" value={[activeContent.cta.headline, activeContent.cta.body, activeContent.cta.button_text].filter(Boolean).join("\n")} />
+                                )}
                               </>
+                            ) : (
+                              <div style={{ textAlign: "center", padding: "24px 16px" }}>
+                                <div style={{ fontSize: 28, marginBottom: 10 }}>{activeLang.flag}</div>
+                                <p style={{ fontSize: 14, color: "#6E6E73", marginBottom: 16 }}>
+                                  {activeLang.name} translation not generated yet
+                                </p>
+                                <button
+                                  onClick={() => handleGenerateWooTranslation(activeWooLang)}
+                                  disabled={wooLangLoading[activeWooLang]}
+                                  style={{ height: 36, padding: "0 20px", background: wooLangLoading[activeWooLang] ? "#AEAEB2" : "#0071E3", color: "#FFFFFF", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: wooLangLoading[activeWooLang] ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "inherit", transition: "background 0.15s ease" }}
+                                >
+                                  {wooLangLoading[activeWooLang] ? (
+                                    <>
+                                      <svg className="animate-spin" width={13} height={13} fill="none" viewBox="0 0 24 24">
+                                        <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                      </svg>
+                                      Translating to {activeLang.name}…
+                                    </>
+                                  ) : (
+                                    `Generate ${activeLang.name}`
+                                  )}
+                                </button>
+                              </div>
                             )}
-                            {copyText && <CopyButton text={copyText} label="Copy all" className="!opacity-100" />}
                           </div>
                         </div>
-
-                        {/* Language tabs */}
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: 0,
-                            padding: "0 16px",
-                            borderBottom: "1px solid #E5E5E7",
-                            background: "#FAFAFA",
-                            overflowX: "auto",
-                          }}
-                        >
-                          {WOO_LANGUAGES.map((lang) => {
-                            const isActive = activeWooLang === lang.code;
-                            const isGenerated = lang.code === "EN" || !!wooTranslations[lang.code];
-                            return (
-                              <button
-                                key={lang.code}
-                                onClick={() => setActiveWooLang(lang.code)}
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 4,
-                                  padding: "9px 10px",
-                                  fontSize: 12,
-                                  fontWeight: isActive ? 600 : 400,
-                                  color: isActive ? "#1d1d1f" : "#AEAEB2",
-                                  background: "none",
-                                  border: "none",
-                                  borderBottom: isActive ? "2px solid #0071E3" : "2px solid transparent",
-                                  cursor: "pointer",
-                                  transition: "all 0.15s ease",
-                                  fontFamily: "inherit",
-                                  whiteSpace: "nowrap",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                <span style={{ fontSize: 14 }}>{lang.flag}</span>
-                                <span>{lang.label}</span>
-                                {isGenerated && lang.code !== "EN" && (
-                                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#34C759", display: "inline-block", marginLeft: 2 }} />
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Content area */}
-                        <div style={{ padding: 16 }}>
-                          {activeContent ? (
-                            <>
-                              <div style={{ marginBottom: 10, padding: "6px 10px", background: "#FFF3E0", borderRadius: 8, fontSize: 12, color: "#E65100", fontWeight: 500 }}>
-                                🧩 WooCommerce fill format — structured for quick copy/paste into product fields
-                              </div>
-                              <Field label="Product Title / Name" value={activeContent.title} />
-                              <Field label="Short Description / Excerpt" value={activeContent.short_description} />
-                              <Field label="Long Description / Product Description (HTML)" value={activeContent.long_description} />
-                              <Field label="SEO Meta Title" value={activeContent.meta_title} />
-                              <Field label="SEO Meta Description" value={activeContent.meta_description} />
-                            </>
-                          ) : (
-                            <div style={{ textAlign: "center", padding: "24px 16px" }}>
-                              <div style={{ fontSize: 28, marginBottom: 10 }}>{activeLang.flag}</div>
-                              <p style={{ fontSize: 14, color: "#6E6E73", marginBottom: 16 }}>
-                                {activeLang.name} translation not generated yet
-                              </p>
-                              <button
-                                onClick={() => handleGenerateWooTranslation(activeWooLang)}
-                                disabled={wooLangLoading[activeWooLang]}
-                                style={{
-                                  height: 36,
-                                  padding: "0 20px",
-                                  background: wooLangLoading[activeWooLang] ? "#AEAEB2" : "#0071E3",
-                                  color: "#FFFFFF",
-                                  border: "none",
-                                  borderRadius: 10,
-                                  fontSize: 13,
-                                  fontWeight: 600,
-                                  cursor: wooLangLoading[activeWooLang] ? "not-allowed" : "pointer",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 6,
-                                  fontFamily: "inherit",
-                                  transition: "background 0.15s ease",
-                                }}
-                              >
-                                {wooLangLoading[activeWooLang] ? (
-                                  <>
-                                    <svg className="animate-spin" width={13} height={13} fill="none" viewBox="0 0 24 24">
-                                      <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                      <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                    </svg>
-                                    Translating to {activeLang.name}…
-                                  </>
-                                ) : (
-                                  `Generate ${activeLang.name}`
-                                )}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                  <RefinementBar
-                    onRefine={(type, custom) => handleRefine("woocommerce", generatedData.woocommerce, type, custom)}
-                    onUndo={() => handleUndoRefine("woocommerce", previousContent["woocommerce"])}
-                    hasPrevious={!!previousContent["woocommerce"]}
-                    isLoading={!!refineLoading["woocommerce"]}
-                    customText={customRefineText["woocommerce"] || ""}
-                    onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, woocommerce: v }))}
-                  />
+                        <RefinementBar
+                          onRefine={(type, custom) => handleRefine("woocommerce", generatedData.woocommerce, type, custom)}
+                          onUndo={() => handleUndoRefine("woocommerce", previousContent["woocommerce"])}
+                          hasPrevious={!!previousContent["woocommerce"]}
+                          isLoading={!!refineLoading["woocommerce"]}
+                          customText={customRefineText["woocommerce"] || ""}
+                          onCustomTextChange={(v) => setCustomRefineText((prev) => ({ ...prev, woocommerce: v }))}
+                        />
                       </>
                     );
                   })()}

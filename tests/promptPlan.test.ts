@@ -46,6 +46,12 @@ test("Japan generation plan splits marketplace into per-module calls plus one so
     assert.doesNotMatch(byKey.yahoo_auction.prompt, foreign, `yahoo_auction prompt must not mention ${foreign}`);
   }
   assert.match(byKey.woocommerce.prompt, /\"woocommerce\"/i);
+  assert.match(byKey.woocommerce.prompt, /long_description_html/i);
+  assert.match(byKey.woocommerce.prompt, /long_description_text/i);
+  assert.match(byKey.woocommerce.prompt, /why_choose_us/i);
+  assert.match(byKey.woocommerce.prompt, /faq/i);
+  assert.match(byKey.woocommerce.prompt, /cta/i);
+  assert.match(byKey.woocommerce.prompt, /accessory_links/i);
   for (const foreign of [/\"amazon\"/i, /\"rakuten\"/i, /\"yahoo_jp\"/i, /\"yahoo_auction\"/i, /\"ebay\"/i, /\"facebook\"/i, /\"twitter\"/i, /\"line\"/i]) {
     assert.doesNotMatch(byKey.woocommerce.prompt, foreign, `woocommerce prompt must not mention ${foreign}`);
   }

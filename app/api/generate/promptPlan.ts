@@ -23,6 +23,11 @@ export interface GenerateRequestPayload {
   newsletterTone?: string;
   titleVariations?: number;
   userRole?: RoleName | string;
+  includeWhyChoose?: boolean;
+  includeFaq?: boolean;
+  includeCta?: boolean;
+  whyChoosePreset?: string;
+  accessoryLinks?: Array<{ sku?: string; label?: string; site?: string; url?: string }>;
 }
 
 export type GenerationPromptKey =
@@ -63,6 +68,17 @@ function normalizeRole(userRole?: string): RoleName {
 }
 
 export function buildProductContext(payload: GenerateRequestPayload): string {
+  const accessoryLinks = payload.accessoryLinks ?? [];
+  const featureFlags = [
+    `Include Why Choose section: ${payload.includeWhyChoose !== false ? "yes" : "no"}`,
+    `Include FAQ section: ${payload.includeFaq !== false ? "yes" : "no"}`,
+    `Include CTA section: ${payload.includeCta !== false ? "yes" : "no"}`,
+    payload.whyChoosePreset ? `Why Choose preset: ${payload.whyChoosePreset}` : "",
+    accessoryLinks.length
+      ? `Accessory links: ${accessoryLinks.map((link) => `${link.label || link.sku || "Accessory"} (${link.sku || ""}) -> ${link.url || ""}`).join("; ")}`
+      : "Accessory links: none provided",
+  ].filter(Boolean).join("\n");
+
   return `Product: ${payload.productName}
 SKU: ${payload.sku}
 Category: ${payload.category}
@@ -71,7 +87,8 @@ Compatible Cars: ${payload.compatibleCars}
 ${payload.screenSize ? `Screen Size: ${payload.screenSize}` : ""}
 ${payload.ramRom ? `RAM/ROM: ${payload.ramRom}` : ""}
 Description: ${payload.shortDescription}
-Selling Points: ${payload.sellingPoints}`;
+Selling Points: ${payload.sellingPoints}
+${featureFlags}`;
 }
 
 function buildGeoMarketplacePrompt(productContext: string, numVariations: number): string {
@@ -81,7 +98,7 @@ Generate optimised listings for this XTRONS product for all supported marketplac
 ${productContext}
 
 Return ONLY a raw JSON object. Use this exact structure:
-{"amazon":{"UK":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"US":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"DE":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"JP":{"title_jp":"","title_en":"","bullets_jp":["","","","",""],"keywords_jp":"","description_jp":""}},"ebay":{"titles":{"UK":["","",""],"US":["","",""],"AU":["","",""],"DE":["","",""]},"description_en":"","description_de":"","specifics":{"Brand":"XTRONS","Model":"","Compatibility":"","Screen Size":"","Connectivity":""}},"aliexpress":{"title":"","description":""},"alibaba":{"product_title":"","headline":"","keywords":"","description_html":"","spec_summary":"","moq":"","lead_time":"","price_note":"","oem_odm":"","packaging_shipping":""},"yahoo_jp":{"product_name":"","catch_copy":"","description_html":"","search_keywords":"","product_code":"","spec_summary":""},"rakuten":{"product_name":"","catch_copy":"","description_html":"","search_keywords":"","item_number":""},"woocommerce":{"title":"","short_description":"","long_description":"","meta_title":"","meta_description":""}}
+{"amazon":{"UK":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"US":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"DE":{"titles":["","",""],"bullets":["","","","",""],"keywords":"","description":""},"JP":{"title_jp":"","title_en":"","bullets_jp":["","","","",""],"keywords_jp":"","description_jp":""}},"ebay":{"titles":{"UK":["","",""],"US":["","",""],"AU":["","",""],"DE":["","",""]},"description_en":"","description_de":"","specifics":{"Brand":"XTRONS","Model":"","Compatibility":"","Screen Size":"","Connectivity":""}},"aliexpress":{"title":"","description":""},"alibaba":{"product_title":"","headline":"","keywords":"","description_html":"","spec_summary":"","moq":"","lead_time":"","price_note":"","oem_odm":"","packaging_shipping":""},"yahoo_jp":{"product_name":"","catch_copy":"","description_html":"","search_keywords":"","product_code":"","spec_summary":""},"rakuten":{"product_name":"","catch_copy":"","description_html":"","search_keywords":"","item_number":""},"woocommerce":{"title":"","short_description":"","long_description_html":"","long_description_text":"","meta_title":"","meta_description":"","accessory_links":[{"sku":"","label":"","site":"","url":""}],"why_choose_us":[{"heading":"","body":""}],"faq":[{"question":"","answer":""}],"cta":{"headline":"","body":"","button_text":""}}}
 
 Rules:
 - Generate ${numVariations} Amazon title variation(s) for UK, US, and DE.
@@ -176,13 +193,15 @@ Generate ONLY WooCommerce content for this product in Japanese.
 ${productContext}
 
 Return ONLY a raw JSON object. Use this exact structure:
-{"woocommerce":{"title":"","short_description":"","long_description":"","meta_title":"","meta_description":""}}
+{"woocommerce":{"title":"","short_description":"","long_description_html":"","long_description_text":"","meta_title":"","meta_description":"","accessory_links":[{"sku":"","label":"","site":"","url":""}],"why_choose_us":[{"heading":"","body":""}],"faq":[{"question":"","answer":""}],"cta":{"headline":"","body":"","button_text":""}}}
 
 Rules:
 - WooCommerce only.
 - All fields must be written in natural Japanese for an e-commerce product page.
-- long_description should use simple HTML only.
+- long_description_html should use simple HTML only.
+- long_description_text should be the human-readable plain-text version of the same content.
 - Keep SEO strong for Japanese search terms and buyer intent.
+- accessory_links should reflect any provided accessory metadata only; do not invent broken URLs.
 - Return only JSON.`;
 }
 
@@ -241,12 +260,14 @@ Generate ONLY WooCommerce content for this product.
 ${productContext}
 
 Return ONLY a raw JSON object. Use this exact structure:
-{"woocommerce":{"title":"","short_description":"","long_description":"","meta_title":"","meta_description":""}}
+{"woocommerce":{"title":"","short_description":"","long_description_html":"","long_description_text":"","meta_title":"","meta_description":"","accessory_links":[{"sku":"","label":"","site":"","url":""}],"why_choose_us":[{"heading":"","body":""}],"faq":[{"question":"","answer":""}],"cta":{"headline":"","body":"","button_text":""}}}
 
 Rules:
 - WooCommerce only.
-- long_description should use simple HTML only.
+- long_description_html should use simple HTML only.
+- long_description_text should be the plain-text review version of the same content.
 - Keep strong SEO coverage.
+- accessory_links should only echo provided accessory metadata; do not fabricate URLs.
 - Return only JSON.`;
 }
 
