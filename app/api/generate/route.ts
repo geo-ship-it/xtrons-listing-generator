@@ -158,10 +158,6 @@ export async function POST(request: NextRequest) {
           if (key === "woocommerce") {
             parsedTask = {
               woocommerce: {
-                accessory_links: [],
-                why_choose_us: [],
-                faq: [],
-                cta: { headline: "", body: "", button_text: "" },
                 ...parsedTask,
               },
             };
