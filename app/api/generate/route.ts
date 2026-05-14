@@ -141,7 +141,12 @@ export async function POST(request: NextRequest) {
           rakuten: (obj) => "product_name" in obj || "catch_copy" in obj || "description_html" in obj,
           yahoo_jp: (obj) => "product_name" in obj || "spec_summary" in obj || "search_keywords" in obj,
           yahoo_auction: (obj) => "title" in obj || "condition" in obj || "shipping_note" in obj,
-          woocommerce: (obj) => "title" in obj || "short_description" in obj || "long_description_html" in obj,
+          woocommerce: (obj) =>
+            "title" in obj ||
+            "short_description" in obj ||
+            "long_description_html" in obj ||
+            "meta_title" in obj ||
+            "cta" in obj,
         };
 
         const needsWrap =
@@ -150,7 +155,19 @@ export async function POST(request: NextRequest) {
           platformWrapFallbacks[key](parsedTask);
 
         if (needsWrap) {
-          parsedTask = { [key]: parsedTask };
+          if (key === "woocommerce") {
+            parsedTask = {
+              woocommerce: {
+                accessory_links: [],
+                why_choose_us: [],
+                faq: [],
+                cta: { headline: "", body: "", button_text: "" },
+                ...parsedTask,
+              },
+            };
+          } else {
+            parsedTask = { [key]: parsedTask };
+          }
         }
 
         // Each per-platform task (amazon_jp, rakuten, yahoo_jp, yahoo_auction, woocommerce)

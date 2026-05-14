@@ -173,6 +173,10 @@ Return ONLY a raw JSON object. Use this exact structure:
 Rules:
 - Yahoo JP only. All content fully Japanese.
 - description_html should use simple HTML only.
+- Keep product_name and catch_copy concise.
+- Keep spec_summary as a single plain-text sentence.
+- search_keywords must be a single comma-separated string, not an array.
+- Do not include line-by-line commentary or extra sections.
 - Do not include markdown, code fences, notes, or any explanation.
 - Do not include any text before or after the JSON object.
 - All keys must use double quotes.
@@ -211,10 +215,14 @@ Return ONLY a raw JSON object. Use this exact structure:
 Rules:
 - WooCommerce only.
 - All fields must be written in natural Japanese for an e-commerce product page.
-- long_description_html should use simple HTML only.
+- long_description_html should use simple HTML only (<p>, <br>, <ul>, <li>, <strong>) and must stay compact.
 - long_description_text should be the human-readable plain-text version of the same content.
-- Keep SEO strong for Japanese search terms and buyer intent.
+- Keep title, short_description, meta_title, and meta_description concise.
+- why_choose_us should contain at most 2 items.
+- faq should contain at most 2 items.
+- If accessory metadata is missing, return accessory_links as an empty array.
 - accessory_links should reflect any provided accessory metadata only; do not invent broken URLs.
+- Do not include line-by-line commentary or extra sections.
 - Do not include markdown, code fences, notes, or any explanation.
 - Do not include any text before or after the JSON object.
 - All keys must use double quotes.
