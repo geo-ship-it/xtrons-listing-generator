@@ -2,7 +2,7 @@ type RoleName = "Geo" | "Japan" | "Ebay" | "Amazon" | "SEO" | "Trading";
 
 const ROLE_MODULES = {
   Geo: ["amazon", "ebay", "aliexpress", "alibaba", "yahoo_jp", "rakuten", "woocommerce", "facebook", "youtube", "twitter", "line", "reddit", "ai_recommendation", "newsletter", "yahoo_auction"],
-  Japan: ["amazon_jp", "rakuten", "yahoo_jp", "yahoo_auction", "line", "facebook_jp", "twitter_jp", "ai_recommendation"],
+  Japan: ["amazon_jp", "woocommerce"],
   Ebay: ["ebay"],
   Amazon: ["amazon"],
   SEO: ["woocommerce", "facebook", "youtube", "twitter", "line", "reddit", "ai_recommendation"],
