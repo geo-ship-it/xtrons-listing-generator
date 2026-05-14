@@ -135,8 +135,25 @@ export async function POST(request: NextRequest) {
       }
       const responseText = result.value.choices[0]?.message?.content || "";
       try {
-        const parsedTask = parseJsonSafe(responseText) as Record<string, unknown>;
-        // Each per-platform task (amazon_jp, rakuten, yahoo_jp, yahoo_auction)
+        let parsedTask = parseJsonSafe(responseText) as Record<string, unknown>;
+
+        const platformWrapFallbacks: Record<string, (obj: Record<string, unknown>) => boolean> = {
+          rakuten: (obj) => "product_name" in obj || "catch_copy" in obj || "description_html" in obj,
+          yahoo_jp: (obj) => "product_name" in obj || "spec_summary" in obj || "search_keywords" in obj,
+          yahoo_auction: (obj) => "title" in obj || "condition" in obj || "shipping_note" in obj,
+          woocommerce: (obj) => "title" in obj || "short_description" in obj || "long_description_html" in obj,
+        };
+
+        const needsWrap =
+          key in platformWrapFallbacks &&
+          !(key in parsedTask) &&
+          platformWrapFallbacks[key](parsedTask);
+
+        if (needsWrap) {
+          parsedTask = { [key]: parsedTask };
+        }
+
+        // Each per-platform task (amazon_jp, rakuten, yahoo_jp, yahoo_auction, woocommerce)
         // returns its own top-level platform key, so a shallow merge preserves shape.
         // Combined tasks (marketplace, social) return multiple top-level keys.
         Object.assign(parsed, parsedTask);
