@@ -156,11 +156,17 @@ Rules:
 - catch_copy should stay within full-width 87 characters.
 - search_keywords should be expanded aggressively with relevant related Japanese keywords and returned as one comma-separated string.
 - description_html must work for both PC and mobile Rakuten product description areas.
-- description_html must contain these 3 clearly separated sections in Japanese:
+- description_html must contain these 3 clearly separated sections in Japanese in this exact order:
   1. 商品名称
   2. 基本信息
   3. 产品功能
 - description_html should use simple HTML only (<p>, <br>, <table>, <tr>, <td>, <ul>, <li>, <strong>).
+- Structure description_html like this:
+  - 商品名称 section: use <p><strong>商品名称</strong></p> followed by 1 concise paragraph.
+  - 基本信息 section: use <p><strong>基本信息</strong></p> followed by a compact <table> with key specs/compatibility.
+  - 产品功能 section: use <p><strong>产品功能</strong></p> followed by a concise <ul><li>...</li></ul> list.
+- Do not merge these sections together.
+- Do not use long unstructured prose for description_html.
 - item_number should be SKU-style and concise.
 - Do not include markdown, code fences, notes, or any explanation.
 - Do not include any text before or after the JSON object.
