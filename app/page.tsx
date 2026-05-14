@@ -1383,18 +1383,25 @@ export default function Home() {
         throw new Error((json.error || (moduleMessage ? `Generation failed (${moduleMessage})` : "Generation failed")).trim());
       }
 
+      const isJapanLeanMode = userRole === "Japan";
       const nextData = {
         ...(json.data as GeneratedData),
-        woocommerce: normalizeWooContent({
-          ...(json.data as GeneratedData).woocommerce,
-          accessory_links: mergeAccessoryLinks(
-            resolvedAccessoryLinks,
-            (json.data as GeneratedData).woocommerce?.accessory_links as ResolvedAccessoryLink[] | undefined
-          ),
-          why_choose_us: includeWhyChoose ? ((json.data as GeneratedData).woocommerce?.why_choose_us?.length ? (json.data as GeneratedData).woocommerce.why_choose_us : buildWhyChoosePresetItems(whyChoosePreset)) : [],
-          faq: includeFaq ? ((json.data as GeneratedData).woocommerce?.faq?.length ? (json.data as GeneratedData).woocommerce.faq : buildDefaultFaqItems()) : [],
-          cta: includeCta ? (((json.data as GeneratedData).woocommerce?.cta?.headline || (json.data as GeneratedData).woocommerce?.cta?.body) ? (json.data as GeneratedData).woocommerce.cta : buildDefaultCta()) : { headline: "", body: "", button_text: "" },
-        }),
+        woocommerce: normalizeWooContent(
+          isJapanLeanMode
+            ? {
+                ...(json.data as GeneratedData).woocommerce,
+              }
+            : {
+                ...(json.data as GeneratedData).woocommerce,
+                accessory_links: mergeAccessoryLinks(
+                  resolvedAccessoryLinks,
+                  (json.data as GeneratedData).woocommerce?.accessory_links as ResolvedAccessoryLink[] | undefined
+                ),
+                why_choose_us: includeWhyChoose ? ((json.data as GeneratedData).woocommerce?.why_choose_us?.length ? (json.data as GeneratedData).woocommerce.why_choose_us : buildWhyChoosePresetItems(whyChoosePreset)) : [],
+                faq: includeFaq ? ((json.data as GeneratedData).woocommerce?.faq?.length ? (json.data as GeneratedData).woocommerce.faq : buildDefaultFaqItems()) : [],
+                cta: includeCta ? (((json.data as GeneratedData).woocommerce?.cta?.headline || (json.data as GeneratedData).woocommerce?.cta?.body) ? (json.data as GeneratedData).woocommerce.cta : buildDefaultCta()) : { headline: "", body: "", button_text: "" },
+              }
+        ),
       } as GeneratedData;
 
       setGeneratedData(nextData);
