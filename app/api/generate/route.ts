@@ -12,32 +12,53 @@ function getClient() {
   });
 }
 
-function parseJsonSafe(text: string): unknown {
-  let jsonText = text.trim();
-  // Remove markdown code fences
-  jsonText = jsonText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
-  // Find outermost JSON object
-  const start = jsonText.indexOf("{");
-  const end = jsonText.lastIndexOf("}");
+function stripCodeFences(text: string): string {
+  return text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+}
+
+function extractOuterJsonObject(text: string): string {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
   if (start !== -1 && end !== -1 && end > start) {
-    jsonText = jsonText.slice(start, end + 1);
+    return text.slice(start, end + 1);
   }
-  try {
-    return JSON.parse(jsonText);
-  } catch {
-    // Try fixing unescaped control characters
-    const fixed = jsonText.replace(/[\x00-\x1F\x7F]/g, (char) => {
-      if (char === "\n") return "\\n";
-      if (char === "\r") return "\\r";
-      if (char === "\t") return "\\t";
-      return "";
-    });
+  return text;
+}
+
+function sanitizeJsonCandidate(text: string): string {
+  let jsonText = text.trim().replace(/^\uFEFF/, "");
+  jsonText = stripCodeFences(jsonText);
+  jsonText = extractOuterJsonObject(jsonText);
+  jsonText = jsonText.replace(/,\s*([}\]])/g, "$1");
+  return jsonText.trim();
+}
+
+function parseJsonSafe(text: string): unknown {
+  const candidates = [text.trim(), sanitizeJsonCandidate(text)];
+
+  for (const candidateText of candidates) {
+    let jsonText = candidateText;
+    jsonText = stripCodeFences(jsonText);
+    jsonText = extractOuterJsonObject(jsonText);
+
     try {
-      return JSON.parse(fixed);
+      return JSON.parse(jsonText);
     } catch {
-      throw new Error(`JSON parse failed. Raw response length: ${text.length}`);
+      const fixed = jsonText.replace(/[\x00-\x1F\x7F]/g, (char) => {
+        if (char === "\n") return "\\n";
+        if (char === "\r") return "\\r";
+        if (char === "\t") return "\\t";
+        return "";
+      });
+      try {
+        return JSON.parse(fixed);
+      } catch {
+        // try next candidate
+      }
     }
   }
+
+  throw new Error(`JSON parse failed. Raw response length: ${text.length}`);
 }
 
 // Role configuration

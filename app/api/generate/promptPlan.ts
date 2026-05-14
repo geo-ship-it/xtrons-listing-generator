@@ -154,6 +154,10 @@ Rules:
 - Rakuten only. All content fully Japanese.
 - description_html should use simple HTML only (<p>, <br>, <ul>, <li>, <strong>).
 - search_keywords: comma-separated Japanese keywords.
+- Do not include markdown, code fences, notes, or any explanation.
+- Do not include any text before or after the JSON object.
+- All keys must use double quotes.
+- If uncertain, still return best-effort valid JSON matching the exact structure.
 - Return only JSON.`;
 }
 
@@ -169,6 +173,10 @@ Return ONLY a raw JSON object. Use this exact structure:
 Rules:
 - Yahoo JP only. All content fully Japanese.
 - description_html should use simple HTML only.
+- Do not include markdown, code fences, notes, or any explanation.
+- Do not include any text before or after the JSON object.
+- All keys must use double quotes.
+- If uncertain, still return best-effort valid JSON matching the exact structure.
 - Return only JSON.`;
 }
 
@@ -184,6 +192,10 @@ Return ONLY a raw JSON object. Use this exact structure:
 Rules:
 - Yahoo Auction only. All content fully Japanese.
 - condition defaults to 新品 unless stated otherwise.
+- Do not include markdown, code fences, notes, or any explanation.
+- Do not include any text before or after the JSON object.
+- All keys must use double quotes.
+- If uncertain, still return best-effort valid JSON matching the exact structure.
 - Return only JSON.`;
 }
 
@@ -203,6 +215,10 @@ Rules:
 - long_description_text should be the human-readable plain-text version of the same content.
 - Keep SEO strong for Japanese search terms and buyer intent.
 - accessory_links should reflect any provided accessory metadata only; do not invent broken URLs.
+- Do not include markdown, code fences, notes, or any explanation.
+- Do not include any text before or after the JSON object.
+- All keys must use double quotes.
+- If uncertain, still return best-effort valid JSON matching the exact structure.
 - Return only JSON.`;
 }
 
