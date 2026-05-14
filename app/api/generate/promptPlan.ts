@@ -152,8 +152,16 @@ Return ONLY a raw JSON object. Use this exact structure:
 
 Rules:
 - Rakuten only. All content fully Japanese.
-- description_html should use simple HTML only (<p>, <br>, <ul>, <li>, <strong>).
-- search_keywords: comma-separated Japanese keywords.
+- product_name should follow Rakuten style and stay within full-width 127 characters.
+- catch_copy should stay within full-width 87 characters.
+- search_keywords should be expanded aggressively with relevant related Japanese keywords and returned as one comma-separated string.
+- description_html must work for both PC and mobile Rakuten product description areas.
+- description_html must contain these 3 clearly separated sections in Japanese:
+  1. 商品名称
+  2. 基本信息
+  3. 产品功能
+- description_html should use simple HTML only (<p>, <br>, <table>, <tr>, <td>, <ul>, <li>, <strong>).
+- item_number should be SKU-style and concise.
 - Do not include markdown, code fences, notes, or any explanation.
 - Do not include any text before or after the JSON object.
 - All keys must use double quotes.
