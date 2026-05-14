@@ -240,39 +240,48 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Normalize WooCommerce rich content backwards compatibility
+    // Normalize WooCommerce content. Japan role uses ultra-lean metadata mode.
     const woocommerce = parsed?.woocommerce as Record<string, unknown> | undefined;
     if (woocommerce) {
-      if (typeof woocommerce.long_description_html !== "string") {
-        woocommerce.long_description_html = typeof woocommerce.long_description === "string" ? woocommerce.long_description : "";
+      if (userRole === "Japan") {
+        parsed.woocommerce = {
+          title: typeof woocommerce.title === "string" ? woocommerce.title : "",
+          short_description: typeof woocommerce.short_description === "string" ? woocommerce.short_description : "",
+          meta_title: typeof woocommerce.meta_title === "string" ? woocommerce.meta_title : "",
+          meta_description: typeof woocommerce.meta_description === "string" ? woocommerce.meta_description : "",
+        };
+      } else {
+        if (typeof woocommerce.long_description_html !== "string") {
+          woocommerce.long_description_html = typeof woocommerce.long_description === "string" ? woocommerce.long_description : "";
+        }
+        if (typeof woocommerce.long_description_text !== "string") {
+          const html = String(woocommerce.long_description_html || "");
+          woocommerce.long_description_text = html
+            .replace(/<\s*br\s*\/?>/gi, "\n")
+            .replace(/<\/(p|div|ul|ol|h[1-6])>/gi, "\n")
+            .replace(/<li>/gi, "- ")
+            .replace(/<[^>]+>/g, "")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+        }
+        const rawAccessoryLinks = Array.isArray(woocommerce.accessory_links) ? woocommerce.accessory_links as Array<Record<string, unknown>> : [];
+        woocommerce.accessory_links = rawAccessoryLinks
+          .map((link) => ({
+            sku: typeof link?.sku === "string" ? link.sku : "",
+            label: typeof link?.label === "string" ? link.label : (typeof link?.sku === "string" ? link.sku : ""),
+            site: typeof link?.site === "string" ? link.site : "",
+            url: typeof link?.url === "string" ? link.url : "",
+          }))
+          .filter((link) => link.sku || link.url);
+        if (!Array.isArray(woocommerce.why_choose_us)) woocommerce.why_choose_us = [];
+        if (!Array.isArray(woocommerce.faq)) woocommerce.faq = [];
+        const cta = woocommerce.cta as Record<string, unknown> | undefined;
+        woocommerce.cta = {
+          headline: typeof cta?.headline === "string" ? cta.headline : "",
+          body: typeof cta?.body === "string" ? cta.body : "",
+          button_text: typeof cta?.button_text === "string" ? cta.button_text : "",
+        };
       }
-      if (typeof woocommerce.long_description_text !== "string") {
-        const html = String(woocommerce.long_description_html || "");
-        woocommerce.long_description_text = html
-          .replace(/<\s*br\s*\/?>/gi, "\n")
-          .replace(/<\/(p|div|ul|ol|h[1-6])>/gi, "\n")
-          .replace(/<li>/gi, "- ")
-          .replace(/<[^>]+>/g, "")
-          .replace(/\n{3,}/g, "\n\n")
-          .trim();
-      }
-      const rawAccessoryLinks = Array.isArray(woocommerce.accessory_links) ? woocommerce.accessory_links as Array<Record<string, unknown>> : [];
-      woocommerce.accessory_links = rawAccessoryLinks
-        .map((link) => ({
-          sku: typeof link?.sku === "string" ? link.sku : "",
-          label: typeof link?.label === "string" ? link.label : (typeof link?.sku === "string" ? link.sku : ""),
-          site: typeof link?.site === "string" ? link.site : "",
-          url: typeof link?.url === "string" ? link.url : "",
-        }))
-        .filter((link) => link.sku || link.url);
-      if (!Array.isArray(woocommerce.why_choose_us)) woocommerce.why_choose_us = [];
-      if (!Array.isArray(woocommerce.faq)) woocommerce.faq = [];
-      const cta = woocommerce.cta as Record<string, unknown> | undefined;
-      woocommerce.cta = {
-        headline: typeof cta?.headline === "string" ? cta.headline : "",
-        body: typeof cta?.body === "string" ? cta.body : "",
-        button_text: typeof cta?.button_text === "string" ? cta.button_text : "",
-      };
     }
 
     // Fill empty stubs for any Japan-split module that was requested but failed,
@@ -293,18 +302,27 @@ export async function POST(request: NextRequest) {
       ensureStub(parsed, "yahoo_auction", () => ({ title: "", condition: "新品", category: "", starting_price: "", buy_now_price: "", description: "", tags: "", shipping_note: "", payment_note: "" }));
     }
     if (requested.has("woocommerce")) {
-      ensureStub(parsed, "woocommerce", () => ({
-        title: "",
-        short_description: "",
-        long_description_html: "",
-        long_description_text: "",
-        meta_title: "",
-        meta_description: "",
-        accessory_links: [],
-        why_choose_us: [],
-        faq: [],
-        cta: { headline: "", body: "", button_text: "" },
-      }));
+      ensureStub(parsed, "woocommerce", () =>
+        userRole === "Japan"
+          ? {
+              title: "",
+              short_description: "",
+              meta_title: "",
+              meta_description: "",
+            }
+          : {
+              title: "",
+              short_description: "",
+              long_description_html: "",
+              long_description_text: "",
+              meta_title: "",
+              meta_description: "",
+              accessory_links: [],
+              why_choose_us: [],
+              faq: [],
+              cta: { headline: "", body: "", button_text: "" },
+            }
+      );
     }
 
     // Suppress unused variable warning

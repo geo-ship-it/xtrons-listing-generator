@@ -224,13 +224,13 @@ Generate ONLY WooCommerce content for this product in Japanese.
 ${productContext}
 
 Return ONLY a raw JSON object. Use this exact structure:
-{"woocommerce":{"title":"","short_description":"","long_description_html":"","meta_title":"","meta_description":""}}
+{"woocommerce":{"title":"","short_description":"","meta_title":"","meta_description":""}}
 
 Rules:
 - WooCommerce only.
 - All fields must be written in natural Japanese for an e-commerce product page.
-- Return lean schema mode only. Do not generate faq, why_choose_us, cta, accessory_links, or long_description_text.
-- long_description_html should use simple HTML only (<p>, <br>, <ul>, <li>, <strong>) and must stay compact.
+- Return ultra-lean schema mode only.
+- Do not generate long_description_html, long_description_text, faq, why_choose_us, cta, or accessory_links.
 - Keep title, short_description, meta_title, and meta_description concise.
 - Keep SEO strong for Japanese search terms and buyer intent.
 - Do not include line-by-line commentary or extra sections.
