@@ -1379,7 +1379,8 @@ export default function Home() {
       const moduleMessage = json.errors && Object.keys(json.errors).length > 0
         ? Object.entries(json.errors).map(([key, value]) => `${key}: ${value}`).join(" | ")
         : "";
-      if (!res.ok || !json.success) {
+      const hasUsableData = !!json.data && Object.keys((json.data as unknown as Record<string, unknown>)).length > 0;
+      if (!res.ok || (!json.success && !hasUsableData)) {
         throw new Error((json.error || (moduleMessage ? `Generation failed (${moduleMessage})` : "Generation failed")).trim());
       }
 
