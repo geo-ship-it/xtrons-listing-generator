@@ -196,6 +196,37 @@ interface ApiResponse<T = unknown> {
   data?: T;
 }
 
+function sanitizeGeneratedDataForRole(role: RoleName | null, data: GeneratedData): GeneratedData {
+  if (role !== "Japan") return data;
+
+  return {
+    ...data,
+    amazon: { JP: { title_jp: "", title_en: "", bullets_jp: ["", "", "", "", ""], keywords_jp: "", description_jp: "" } } as AmazonData,
+    ebay: {
+      titles: { UK: [""], US: [""], AU: [""], DE: [""] },
+      description: "",
+      specifics: {},
+    },
+    aliexpress: { title: "", description: "" },
+    alibaba: {
+      product_title: "",
+      headline: "",
+      keywords: "",
+      description_html: "",
+      spec_summary: "",
+      moq: "",
+      lead_time: "",
+      price_note: "",
+      oem_odm: "",
+      packaging_shipping: "",
+    },
+    youtube: { title: "", description: "", tags: "", script_outline: "" },
+    reddit: { title: "", body: "" },
+    ai_recommendation: { suggestions: [], blurb: "" },
+    newsletter: undefined,
+  };
+}
+
 interface ScrapedProductData {
   productName?: string;
   sku?: string;
@@ -1405,7 +1436,7 @@ export default function Home() {
         ),
       } as GeneratedData;
 
-      setGeneratedData(nextData);
+      setGeneratedData(sanitizeGeneratedDataForRole(userRole, nextData));
       setResolvedAccessoryLinks(nextData.woocommerce?.accessory_links ?? []);
       if (userRole === "Japan" && nextData.woocommerce) {
         setWooTranslations({ JP: nextData.woocommerce });
@@ -1505,7 +1536,7 @@ export default function Home() {
       ...restored,
       woocommerce: normalizeWooContent(restored.woocommerce),
     } as GeneratedData;
-    setGeneratedData(nextData);
+    setGeneratedData(sanitizeGeneratedDataForRole(entry.role as RoleName, nextData));
     setResolvedAccessoryLinks(nextData.woocommerce?.accessory_links ?? []);
     setImportUrl(entry.sourceUrl || "");
     setSourceProductUrl(entry.sourceUrl || "");
