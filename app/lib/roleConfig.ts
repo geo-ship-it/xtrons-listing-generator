@@ -9,7 +9,8 @@ export const ROLE_CONFIG = {
   },
   Japan: {
     allowedModules: [
-      "amazon_jp", "woocommerce"
+      "rakuten", "yahoo_jp", "yahoo_auction", "woocommerce",
+      "facebook_jp", "twitter_jp", "line"
     ],
   },
   Ebay: {
@@ -59,7 +60,7 @@ const SOCIAL_CARD_RULES: Record<SocialCard, readonly string[]> = {
 
 const MARKETPLACE_CARD_ORDER: Record<RoleName, readonly MarketplaceCard[]> = {
   Geo: ["amazon", "ebay", "aliexpress", "alibaba", "yahoo_jp", "rakuten", "yahoo_auction", "woocommerce"],
-  Japan: ["amazon", "woocommerce"],
+  Japan: ["rakuten", "yahoo_jp", "yahoo_auction", "woocommerce"],
   Ebay: ["ebay"],
   Amazon: ["amazon"],
   SEO: ["woocommerce"],

@@ -2,7 +2,7 @@ type RoleName = "Geo" | "Japan" | "Ebay" | "Amazon" | "SEO" | "Trading";
 
 const ROLE_MODULES = {
   Geo: ["amazon", "ebay", "aliexpress", "alibaba", "yahoo_jp", "rakuten", "woocommerce", "facebook", "youtube", "twitter", "line", "reddit", "ai_recommendation", "newsletter", "yahoo_auction"],
-  Japan: ["amazon_jp", "woocommerce"],
+  Japan: ["rakuten", "yahoo_jp", "yahoo_auction", "woocommerce", "facebook_jp", "twitter_jp", "line"],
   Ebay: ["ebay"],
   Amazon: ["amazon"],
   SEO: ["woocommerce", "facebook", "youtube", "twitter", "line", "reddit", "ai_recommendation"],
@@ -363,7 +363,6 @@ export function buildGenerationPlan(payload: GenerateRequestPayload): Generation
   switch (role) {
     case "Japan":
       return [
-        { key: "amazon_jp", prompt: buildJapanAmazonPrompt(productContext, numVariations), maxTokens: TOKENS.japanAmazon },
         { key: "rakuten", prompt: buildJapanRakutenPrompt(productContext), maxTokens: TOKENS.japanRakuten },
         { key: "yahoo_jp", prompt: buildJapanYahooJpPrompt(productContext), maxTokens: TOKENS.japanYahooJp },
         { key: "yahoo_auction", prompt: buildJapanYahooAuctionPrompt(productContext), maxTokens: TOKENS.japanYahooAuction },

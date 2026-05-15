@@ -2300,9 +2300,7 @@ export default function Home() {
 
           {generatedData && !loading && (() => {
             const visibleTabs = getVisibleTabs(userRole);
-            const visibleMarketplaceCards: string[] = userRole === "Japan"
-              ? ["amazon", "woocommerce"]
-              : [...getVisibleMarketplaceCards(userRole)];
+            const visibleMarketplaceCards = getVisibleMarketplaceCards(userRole);
             const visibleSocialCards = getVisibleSocialCards(userRole);
             const visibleAmazonMarkets = getVisibleAmazonMarkets(userRole);
             const visibleFacebookLangs = getVisibleFacebookLangs(userRole);
